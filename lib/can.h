@@ -10,7 +10,7 @@
 
 // function declarations
 bool Can_Init(void);
-void FDCAN2_Send_Std_CAN_Message(void);
+bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame);
 
 
 #endif

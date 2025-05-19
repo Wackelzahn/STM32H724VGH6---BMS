@@ -98,6 +98,13 @@ int main(void) {
 
   Can_Init();         // Initialize CAN
 
+  if (FDCAN2_Send_Std_CAN_Message(&Tx_Temperature)) {
+    x++;
+  } else {
+    x--;
+  } 
+
+
 
   while (1) {
 
@@ -124,7 +131,7 @@ int main(void) {
       one_sec_tick = 0;
       // Do something every second
       // For example, send a message over CAN
-      FDCAN2_Send_Std_CAN_Message();
+      //FDCAN2_Send_Std_CAN_Message();
     }
 
   }

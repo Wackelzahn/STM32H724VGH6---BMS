@@ -86,6 +86,7 @@ typedef struct {
   uint32_t T0;
   uint32_t T1;
   uint8_t data[8];
+  uint32_t reserved[14]; // reserved bytes
 } CAN_TxBufferElement;
 
 // FDCAN Receive Message RAM structure , only 8 bytes of data are used. 
@@ -93,7 +94,7 @@ typedef struct {
   uint32_t R0;
   uint32_t R1;
   uint8_t data[8];
-  uint32_t reserved[14]; // 2 reserved bytes
+  uint32_t reserved[14]; // reserved bytes
 } CAN_RxBufferElement;
 
 
@@ -113,14 +114,14 @@ typedef struct {
 #define FDCAN1_RxFIFO0 ((CAN_RxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_RX_FIFO0_offset))
 #define FDCAN1_RxFIFO1 ((CAN_RxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_RX_FIFO1_offset))
 #define FDCAN1_TxEventFIFO ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_TX_EVENT_FIFO_offset))
-#define FDCAN1_TxBuffer ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_TX_BUFFER_offset))
+#define FDCAN1_TxBuffer ((CAN_TxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_TX_BUFFER_offset))
 
 #define FDCAN2_StandartMessageIDFilter ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_Std_Filter_RAM_offset))
 #define FDCAN2_ExtendedMessageIDFilter ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_Ext_Filter_RAM_offset))
 #define FDCAN2_RxFIFO0 ((CAN_RxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_RX_FIFO0_offset))
 #define FDCAN2_RxFIFO1 ((CAN_RxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_RX_FIFO1_offset))
 #define FDCAN2_TxEventFIFO ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_TX_EVENT_FIFO_offset))
-#define FDCAN2_TxBuffer ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_TX_BUFFER_offset))
+#define FDCAN2_TxBuffer ((CAN_TxBufferElement *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_TX_BUFFER_offset))
 
 
 

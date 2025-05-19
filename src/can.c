@@ -157,16 +157,25 @@ bool Can_Init(void) {
 }
 
 
-void FDCAN2_Send_Std_CAN_Message(void) {
+bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
     FDCAN2->TXBC &= ~BIT(24); // TX fifo operatioon mode
+
+    uint32_t txfqs = FDCAN2->TXFQS; // Get Tx FIFO queue status
+    uint32_t free_level = (txfqs &= 0x7U); // Get free level (TFFL) of Tx FIFO
     
-    FDCAN2_TxEventFIFO[0] = 0x048C0000; // T0: ID=0x123, standard ID, data frame
-    FDCAN2_TxEventFIFO[1] = 0x00040000; // T1: DLC=4, classic CAN
-    FDCAN2_TxEventFIFO[2] = 0xAABBCCDD; // T2: Data bytes 0–3
-    FDCAN2_TxEventFIFO[3] = 0x00000000; // T3: No data for bytes 4–7
+    if (free_level == 0) { // Check if Tx FIFO is empty
+        return false; // Tx FIFO is full, cannot send message
+    }
     
-    FDCAN2->TXBAR = 0x00000001; // Add request for FIFO element 0
-};
+    uint8_t put_index = (txfqs >> 16) & 0x3U; // Put index (TFQPI)
+    
+    FDCAN2_TxBuffer[put_index] = *TxFrame; // Copy the message to the Tx buffer
+
+    if (put_index == 0) FDCAN2->TXBAR |= BIT(0); // Set Tx buffer request pending (TFRP) for buffer 0
+    else if (put_index == 1) FDCAN2->TXBAR |= BIT(1); // Set Tx buffer request pending (TFRP) for buffer 1
+    else if (put_index == 2) FDCAN2->TXBAR |= BIT(2); // Set Tx buffer request pending (TFRP) for buffer 2
+   return true; // Message sent successfully
+}
 
 
 
