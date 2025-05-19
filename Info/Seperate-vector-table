@@ -1,0 +1,164 @@
+To move your startup code and interrupt vector table (ISR table) from the end of main.c into a separate file for compilation and linking, you’ll need to:
+	1	Create a separate source file (e.g., startup.c) for the startup code and vector table.
+	2	Optionally, create a header file (e.g., startup.h) to declare shared symbols or functions.
+	3	Adjust your build system (e.g., Makefile or linker script) to include the new file.
+	4	Ensure proper linkage of symbols between main.c, the new startup file, and the linker script (link.ld).
+Here’s a step-by-step guide to accomplish this for your STM32F439 project:
+
+Step 1: Create `startup.c`
+Move the startup code and vector table to a new file called startup.c. This file will contain the reset handler and the interrupt vector table.
+// startup.c
+#include 
+
+// External symbols defined in link.ld or other files
+extern long _sbss, _ebss, _sdata, _edata, _sidata;
+extern void _estack(void);  // Stack top, defined in link.ld
+extern int main(void);      // Main function from main.c
+
+// Weak declarations for interrupt handlers (can be overridden elsewhere)
+void SysTick_Handler(void) __attribute__((weak));
+void CAN1_RX0_IRQHandler(void) __attribute__((weak));
+void USART1_IRQHandler(void) __attribute__((weak));
+void USART2_IRQHandler(void) __attribute__((weak));
+
+// Reset handler: Initialize .bss and .data, then call main()
+__attribute__((naked, noreturn)) void _reset(void) {
+  // Zero out .bss section
+  for (long *dst = &_sbss; dst < &_ebss; dst++) *dst = 0;
+  // Copy .data section from flash to RAM
+  for (long *dst = &_sdata, *src = &_sidata; dst < &_edata;) *dst++ = *src++;
+
+  main();             // Call main()
+  for (;;) (void) 0;  // Infinite loop if main() returns
+}
+
+// Interrupt vector table
+__attribute__((section(".vectors"))) void (*const tab[16 + 91])(void) = {
+    _estack,           // 0: Stack pointer
+    _reset,            // 1: Reset handler
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 2-14: Core exceptions
+    SysTick_Handler,   // 15: SysTick
+    // IRQ0 to IRQ36 (positions 16 to 52)
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // IRQ0 .. IRQ9
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // IRQ10 .. IRQ19
+    CAN1_RX0_IRQHandler,   // IRQ20: CAN1 RX0
+    0, 0, 0, 0, 0, 0, 0, 0, 0,    // IRQ21 .. IRQ29
+    0, 0, 0, 0, 0, 0, 0,          // IRQ30 .. IRQ36
+    USART1_IRQHandler,     // IRQ37: USART1
+    USART2_IRQHandler,     // IRQ38: USART2
+    0, 0, 0               // IRQ39 .. IRQ41 (and beyond, up to 106 total)
+};
+
+// Default weak implementations (optional, can be overridden in other files)
+__attribute__((weak)) void SysTick_Handler(void) { while (1); }
+__attribute__((weak)) void CAN1_RX0_IRQHandler(void) { while (1); }
+__attribute__((weak)) void USART1_IRQHandler(void) { while (1); }
+__attribute__((weak)) void USART2_IRQHandler(void) { while (1); }
+Notes:
+	•	The __attribute__((weak)) directive allows these handlers to be overridden elsewhere (e.g., in main.c or another file) without linker errors.
+	•	The vector table is placed in the .vectors section, which must match the linker script (see Step 3).
+
+Step 2: Create `startup.h` (Optional)
+If you want to declare interrupt handlers or other symbols for use in main.c or elsewhere, create a header file:
+// startup.h
+#ifndef STARTUP_H
+#define STARTUP_H
+
+void _reset(void);
+void SysTick_Handler(void);
+void CAN1_RX0_IRQHandler(void);
+void USART1_IRQHandler(void);
+void USART2_IRQHandler(void);
+
+#endif
+Include this in main.c or other files where you define custom interrupt handlers.
+
+Step 3: Update Your Linker Script (`link.ld`)
+Ensure your linker script places the .vectors section at the start of flash memory (typically 0x00000000 for STM32 unless relocated). Here’s an example snippet:
+MEMORY {
+  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 2048K
+  RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 256K
+}
+
+SECTIONS {
+  .vectors : {
+    KEEP(*(.vectors))  /* Keep the vector table */
+  } > FLASH
+
+  .text : {
+    *(.text*)          /* Program code */
+    *(.rodata*)        /* Read-only data */
+  } > FLASH
+
+  .data : {
+    _sdata = .;        /* Start of .data in RAM */
+    *(.data*)          /* Initialized data */
+    _edata = .;        /* End of .data */
+  } > RAM AT > FLASH
+
+  .bss : {
+    _sbss = .;         /* Start of .bss */
+    *(.bss*)           /* Uninitialized data */
+    *(COMMON)
+    _ebss = .;         /* End of .bss */
+  } > RAM
+
+  _sidata = LOADADDR(.data);  /* Load address of .data in FLASH */
+  _estack = ORIGIN(RAM) + LENGTH(RAM);  /* Stack top */
+}
+	•	The .vectors section is mapped to the start of FLASH (e.g., 0x08000000 for STM32F439 after boot mapping).
+	•	Symbols like _sbss, _ebss, _sdata, _edata, _sidata, and _estack are defined for use in startup.c.
+
+Step 4: Update `main.c`
+Remove the startup code and vector table from main.c. Include startup.h if needed for interrupt handler declarations. For example:
+// main.c
+#include "startup.h"  // Optional, if you need handler declarations
+
+int main(void) {
+  // Your application code here
+  return 0;
+}
+
+// Example: Override a handler
+void CAN1_RX0_IRQHandler(void) {
+  // Custom CAN1 RX0 interrupt handling
+}
+
+Step 5: Update Your Build System
+Assuming you’re using a Makefile, add startup.c to the list of source files. Example:
+CC = arm-none-eabi-gcc
+LD = arm-none-eabi-ld
+OBJCOPY = arm-none-eabi-objcopy
+
+CFLAGS = -mcpu=cortex-m4 -mthumb -g -O0
+LDFLAGS = -T link.ld
+
+SOURCES = main.c startup.c
+OBJECTS = $(SOURCES:.c=.o)
+TARGET = program
+
+all: $(TARGET).elf
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJECTS)
+	$(LD) $(LDFLAGS) $(OBJECTS) -o $@
+
+clean:
+	rm -f *.o *.elf
+
+.PHONY: all clean
+	•	Compile both main.c and startup.c.
+	•	Link them with link.ld.
+
+Step 6: Verify
+	•	Build your project (make or equivalent).
+	•	Check the generated .elf file (e.g., with arm-none-eabi-objdump -d program.elf) to ensure the vector table is at the correct address (e.g., 0x08000000) and includes _estack, _reset, and your handlers.
+
+Summary
+	•	New File: startup.c contains _reset and the vector table.
+	•	Linker Script: Ensures .vectors is at the start of FLASH and defines memory symbols.
+	•	Build System: Updated to compile and link startup.c.
+	•	Main: Cleaned up to focus on application logic, with optional handler overrides.
+This separation improves modularity and aligns with typical embedded development practices. Let me know if you encounter issues or need help debugging the build!

@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "conversion.h": "c",
+        "registers.h": "c",
+        "inttypes.h": "c"
+    }
+}
