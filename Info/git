@@ -6,6 +6,8 @@
 
 https://github.com/Wackelzahn/STM32G0B1_Shunt.git
 
+git add .
+
 git commit -am "Second commit"
 
 git push origin master
