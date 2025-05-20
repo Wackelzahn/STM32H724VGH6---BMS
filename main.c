@@ -68,7 +68,8 @@ static inline void init_clock(void) {
   RCC->APBENR2 |= (1U << 0);  // Enable SYSCFG clock
 }
 
-static inline void systick_init(uint32_t ticks) {
+static inline void systick_init() {
+  uint32_t ticks = 16000; // 1ms tick at 16MHz, 16,000 Cycles
   if ((ticks - 1) > 0xffffff) return;    // Systick timer is 24 bit
   SYST->RVR = ticks - 1;
   SYST->CVR = 0;
@@ -83,15 +84,22 @@ static inline void PA2_out_init() {
   GPIOA->ODR |= (1U << 2);             // Set PA2
 }
 
-
+static inline void PB4_out_init() {
+  RCC->IOPENR |= 1 << 1;              // Enable GPIOB clock
+  GPIOB->MODER |= 1 << 8;             // Set PB4 to output mode
+  GPIOB-> OTYPER |= 1 << 4;           // Set PB4 to open drain
+  GPIOB->ODR &= ~(1U << 4);           // Clear PB4
+  GPIOB->ODR |= (1U << 4);            // Set PB4
+}
 
 
 
 int main(void) {
 
   init_clock();             // Initialize system clock
-  systick_init(FREQ / 1);   // 1s second (STM32G0 runs at 16MHz)
+  systick_init();   // 1s second (STM32G0 runs at 16MHz)
   PA2_out_init();           // Test output PA2
+  PB4_out_init();           // Test output PB4
   if (INA228_Init()){
     x++;
   };                  // Initialize INA228 
@@ -127,11 +135,13 @@ int main(void) {
     // Do something with rx_received[8]
     }
 
-    if (one_sec_tick >= 1000) {
+    if (one_sec_tick >= 1000) { // 1 second tick
       one_sec_tick = 0;
       // Do something every second
       // For example, send a message over CAN
       //FDCAN2_Send_Std_CAN_Message();
+      FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
+      GPIOB->ODR ^= (1 << 4); // Toggle PB4
     }
 
   }
