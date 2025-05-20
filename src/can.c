@@ -19,7 +19,7 @@
 #include "can.h"
 #include "registers.h"
 
-#define BIT(x) (1UL << (x)) // Bit bangging
+#define BIT(x) (1UL << (x)) // Bit banging
 int32_t counter_loop = 0;   // counter for waiting loops
 
 
@@ -178,79 +178,5 @@ bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
 }
 
 
-
-
-
-
-
-
-
-/*  function to send a message over the CAN bus
-    returns false if sending failed 
-bool Can_SendMessage (struct can *can, CAN_TX_FRAME *TXFrame) {
-    counter_loop = 0;
-    while ((can->TSR & (0x1UL << 26U)) == 0)    // wait until transmit mailbox 0 is empty *TME0->Bit26
-    {                                   
-        if (counter_loop > 1000) {
-        return false;
-        }
-        counter_loop++;
-    }; 
-
-    can->TI0R &= ~(0x7FFUL << 21U);             // set "standart" identifier
-    can->TI0R &= ~BIT(1);                       // set Data Frame
-    can->TI0R |= (TXFrame->identifier << 21);   // set the identifier
-    can->TDT0R &= ~(BIT(0) | BIT(1) | BIT(2) | BIT(3) | BIT(8)); // clear data length.
-    can->TDT0R |= TXFrame->length << 0;         // set the data length
-    
-
-    // store the data into the mailbox LOW
-    can->TDL0R = 
-        ((uint32_t) TXFrame->data[3] << 24U) |
-        ((uint32_t) TXFrame->data[2] << 16U) |
-        ((uint32_t) TXFrame->data[1] << 8U) |
-        ((uint32_t) TXFrame->data[0] << 0U);  
-    // store the data into the mailbox HIGH
-    can->TDH0R = 
-        ((uint32_t) TXFrame->data[7] << 24U) |
-        ((uint32_t) TXFrame->data[6] << 16U) |
-        ((uint32_t) TXFrame->data[5] << 8U) |
-        ((uint32_t) TXFrame->data[4] << 0U);  
-    
-    // start the transmission
-    can->TI0R |= (1U << 0U);    // transmission request TXRQ
-
-    return true;                // return success
-    
-} */
-
-/*  function to check if a message is pending in the FIFO-0
-    returns true if a message is pending and is being read 
-bool Can_ReceiveMessage (struct can *can, CAN_RX_FRAME *RXFrame) {
-    if (can->RF0R & 0x00000003U)            // If FIFO-0 has pending message
-        {      
-            RXFrame->identifier = (can->RI0R >> 3) & 0x1FFFFFFF;    // get identifier of data
-            RXFrame->length = can->RDT0R & 0x0F;                    // get legth of data
-            
-            for (int i=0; i<8; i++)         // clear the old data before getting new one from FIFO
-            {
-                RXFrame->data[0]=0;
-            }
-        
-        RXFrame->data[0]=(uint8_t)(can->RDL0R >> 0U);
-        RXFrame->data[1]=(uint8_t)(can->RDL0R >> 8U);
-        RXFrame->data[2]=(uint8_t)(can->RDL0R >> 16U);
-        RXFrame->data[3]=(uint8_t)(can->RDL0R >> 24U);
-        RXFrame->data[4]=(uint8_t)(can->RDH0R >> 0U);
-        RXFrame->data[5]=(uint8_t)(can->RDH0R >> 8U);
-        RXFrame->data[6]=(uint8_t)(can->RDH0R >> 16U);
-        RXFrame->data[7]=(uint8_t)(can->RDH0R >> 24U);
-
-        can->RF0R |= BIT(5);        // Release the FIFO by setting RFOM0
-        
-        return (1);
-        }
-    else return (0);
-} */
 
 
