@@ -38,6 +38,13 @@ bool INA228_Init(void) {
     }                                           
     else return false;   // failure   
     
+    // INA228 Temperature coefficient
+    // Set to 40 ppm/°C --> In the Range of appr. 25°C to 50°C
+    // 0x0028U = 40 ppm/°C
+    if (INA228_SetShuntTempco(0x0028U)){    
+    }                                           
+    else return false;   // failure
+
     return true;
     }
 

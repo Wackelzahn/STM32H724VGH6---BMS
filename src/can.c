@@ -131,8 +131,8 @@ bool Can_Init(void) {
     FDCAN2->IE |= BIT(0);           // Rx FIFO 0 new message interrupt enable
     FDCAN2->ILE |= BIT(0);          // Enable IT0 line to NVIC (to enable IT1 set to 1))
 
-    NVIC->ISER[0] |= (1 << 21);        // Enable FDCAN2 interrupt in NVIC (IRQ21)
-    NVIC->IPR[21] = (0 << 6);        // Set NVIC interrupt priority
+    NVIC->ISER[0] |= (1 << 21);     // Enable FDCAN2 interrupt in NVIC (IRQ21)
+    NVIC->IPR[21] = (0 << 6);       // Set NVIC interrupt priority
 
 
 
@@ -140,12 +140,12 @@ bool Can_Init(void) {
     // Start FDCAN operation
     FDCAN2->CCCR &= ~BIT(4);
     FDCAN2->CCCR &= ~BIT(3);
-    FDCAN2->CCCR &= ~BIT(2);            // Clear ASM
-    FDCAN2->CCCR &= ~BIT(1);            // Clear CCE bit to allow normal operation
-    FDCAN2->CCCR &= ~BIT(0);            // Clear INIT bit to start operation
+    FDCAN2->CCCR &= ~BIT(2);         // Clear ASM
+    FDCAN2->CCCR &= ~BIT(1);         // Clear CCE bit to allow normal operation
+    FDCAN2->CCCR &= ~BIT(0);         // Clear INIT bit to start operation
 
     counter_loop = 0;
-    while (FDCAN2->CCCR & BIT(0))       // Wait until INIT bit is cleared
+    while (FDCAN2->CCCR & BIT(0))    // Wait until INIT bit is cleared
     {                                   
         if (counter_loop > 1000) {
             return false;

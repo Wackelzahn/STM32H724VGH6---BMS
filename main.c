@@ -37,9 +37,9 @@ uint32_t temp;
 uint32_t Sprong1, Sprong2, Kaponk4, Power_mW; 
 uint64_t Kaponk, Energy_Joule;
 uint64_t Kagong;
-uint16_t vbus, vbus_mV, DieID, ManufacturerID;
-int32_t Current_mA, Kaponk2, Kaponk3, ShuntV_uV;
-int16_t Kaponk1, Temperature;
+uint16_t vbus, vbus_mV, INA228_DieID, INA228_ManufacturerID;
+int32_t Current_mA, Kaponk2, INA228_ShuntVltg, ShuntV_uV;
+int16_t INA228_Temp, Temperature;
 
 volatile uint8_t rx_flag = 0;
 volatile uint8_t rx_received[8];
@@ -128,14 +128,23 @@ int main(void) {
 
   // FDCAN2_Send_Std_CAN_Message();
 
-  if (INA228_ReadTemp(&Kaponk1)) {
-    Temperature = Kaponk1;
+  if (INA228_ReadTemp(&INA228_Temp)) {
+    Temperature = INA228_Temp;
+    Tx_Temperature.data[0] = (uint8_t)(Temperature >> 8); // Store temperature in Tx buffer
+    Tx_Temperature.data[1] = (uint8_t)(Temperature & 0xFF);
     (void)Temperature;  // preventing compiler complained for not being used.
     }
 
-  if (INA228_ReadShuntV(&Kaponk3)) {
-    ShuntV_uV = Kaponk3;
+  if (INA228_ReadShuntV(&INA228_ShuntVltg)) {
+    ShuntV_uV = INA228_ShuntVltg;
     (void)ShuntV_uV;
+    }
+
+if (INA228_ReadDieID(&INA228_DieID)) {
+    (void)INA228_DieID;
+    }
+if (INA228_ReadManufacturerID(&INA228_ManufacturerID)) {
+    (void)INA228_ManufacturerID;
     }
 
 
