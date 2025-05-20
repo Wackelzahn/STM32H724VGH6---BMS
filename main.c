@@ -85,9 +85,18 @@ static inline void PA2_out_init() {
 }
 
 static inline void PB4_out_init() {
-  RCC->IOPENR |= 1 << 1;              // Enable GPIOB clock
-  GPIOB->MODER |= 1 << 8;             // Set PB4 to output mode
-  GPIOB-> OTYPER |= 1 << 4;           // Set PB4 to open drain
+     // Enable GPIOB clock
+    RCC->IOPENR |= (1U << 1);  // Set bit 1 for GPIOBEN
+    // Configure PB4 as general purpose output mode
+    GPIOB->MODER &= ~(3U << (4 * 2));  // Clear mode bits for pin 4 (2 bits per pin)
+    GPIOB->MODER |= (1U << (4 * 2));   // Set as output (01) for pin 4
+    // Configure PB4 as open drain
+    GPIOB->OTYPER |= (1U << 4);  // Set open drain (1) for pin 4
+    // Configure speed (optional, medium speed used here)
+    GPIOB->OSPEEDR &= ~(3U << (4 * 2));  // Clear speed bits for pin 4
+    GPIOB->OSPEEDR |= (1U << (4 * 2));   // Set as medium speed (01) for pin 4
+    // No pull-up needed since LED circuit provides the pull to VCC
+    GPIOB->PUPDR &= ~(3U << (4 * 2));    // Clear PUPD bits (00 = no pull-up/down)
   GPIOB->ODR &= ~(1U << 4);           // Clear PB4
   GPIOB->ODR |= (1U << 4);            // Set PB4
 }

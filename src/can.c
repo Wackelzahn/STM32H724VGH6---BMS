@@ -113,8 +113,8 @@ bool Can_Init(void) {
     }
 
     // Set filter 0 to accept ID 0x127
-    FDCAN2_StandartMessageIDFilter[0] = (0x7FFU << 0) |(0x127U << 16) |(0b001U << 27) |(0b10U << 30); 
-
+    FDCAN2_StandartMessageIDFilter[0] = (0x127U << 0) |(0x127U << 16) |(0b001U << 27) |(0b10U << 30); 
+    FDCAN2_StandartMessageIDFilter[1] = (0x128U << 0) |(0x128U << 16) |(0b001U << 27) |(0b10U << 30); 
 
     // Configure global filter settings
     // Set RRFE = 1 (reject extended frames), Set ANFE = 0b11 Reject non-matching frames
@@ -123,7 +123,7 @@ bool Can_Init(void) {
                     (1U << 1) |     // Reject all remote frames with 11bit ID (RRFE = 1)
                     (0b11 << 2) |   // Reject non-matching frames (ANFE = 0b11) 11bit ID
                     (0b11 << 4) |   // Reject non matching 11 bit ID's
-                    (1U << 16);     // Set LSS = 0b00001 (one standard filter)
+                    (2U << 16);     // Set LSS = 0b00010 (two standard filter)
                     
 
     // Configure Interrupt for RX FIFO 0 receive new message
