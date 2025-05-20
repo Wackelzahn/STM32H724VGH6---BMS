@@ -4,15 +4,15 @@
 // -----------------------------------------------------
 // Target Device: STM32FF439ZI
 // -----------------------------------------------------
-// Programming Language: C, bare metal
+// Programming Language: C, pure bare metal (no CMSIS)
 //
 // This is the implementation file CAN bus interfacing 
-// for the STM32F439
+// for the STM32G0B1 microcontroller.
 // This source code is intended to create 
-//    - the initialization of the can interface
+//    - the initialization of the FDAN2 interface
 //      1. Initialization of the GPIO
 //      2. Setting up the Filter
-//      3. fUNCTIONS FOR sending and receiving messages
+//      3. FUNCTIONS FOR sending (receive is handled in ISR)
 // -----------------------------------------------------
 
 
@@ -23,13 +23,14 @@
 int32_t counter_loop = 0;   // counter for waiting loops
 
 
-/*  function for initializing the FDCAN2 Interface for STM32G0B1
-    CAN_RX on PB0, CAN_TX on PB1, Clock speed: 16MHz
-    Target bitrate: 500 Kbps
-    ------------------------------------
-    Parameters:  can: pointer to the CAN register
-    Returns:     1=success, 0=fail 
-*/
+//  function for initializing the FDCAN2 Interface for STM32G0B1
+//   CAN_RX on PB0, CAN_TX on PB1, Clock speed: 16MHz
+//   Target bitrate: 500 Kbps
+//  ------------------------------------
+//  Parameters:  none
+//  Returns:     1=success, 0=fail 
+//  ------------------------------------
+
 bool Can_Init(void) {
     // 1. enable Clocks
     RCC->IOPENR |= BIT(1);           // Enable clock for GPIOB
@@ -42,10 +43,6 @@ bool Can_Init(void) {
     // Set pins to AF3 for FDCAN2 (PB0/PB1 on AF3 according to STM32G0B1 datasheet)
     GPIOB->AFR[0] &= ~(0xFU << (0*4) | 0xFU << (1*4));  // Clear AF for PB0 & PB1
     GPIOB->AFR[0] |= (0x3U << (0*4) | 0x3U << (1*4));   // Set AF3 for FDCAN2
-
-
-
-
 
     // Enable FDCAN clock
     RCC->APBENR1 |= BIT(12);         // Enable the clock for FDCAN2 (bit 12 in APBENR1)
@@ -125,7 +122,6 @@ bool Can_Init(void) {
                     (0b11 << 4) |   // Reject non matching 11 bit ID's
                     (2U << 16);     // Set LSS = 0b00010 (two standard filter)
                     
-
     // Configure Interrupt for RX FIFO 0 receive new message
     FDCAN2->ILS &= BIT(0);          // Assign RF0N to IT0 (clear bit 0) 
     FDCAN2->IE |= BIT(0);           // Rx FIFO 0 new message interrupt enable
@@ -134,9 +130,6 @@ bool Can_Init(void) {
     NVIC->ISER[0] |= (1 << 21);     // Enable FDCAN2 interrupt in NVIC (IRQ21)
     NVIC->IPR[21] = (0 << 6);       // Set NVIC interrupt priority
 
-
-
-    
     // Start FDCAN operation
     FDCAN2->CCCR &= ~BIT(4);
     FDCAN2->CCCR &= ~BIT(3);
@@ -156,6 +149,12 @@ bool Can_Init(void) {
     return true;                     // Return success
 }
 
+//  function for sending a standart CAN frame through FDCAN2 Interface
+//  ------------------------------------
+//  Parameters:  TxFrame: pointer to the CAN_TxBufferElement structure
+//               containing the message to be sent
+//  Returns:     1=success, 0=fail 
+//  ------------------------------------
 
 bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
     FDCAN2->TXBC &= ~BIT(24); // TX fifo operatioon mode
@@ -174,7 +173,10 @@ bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
     if (put_index == 0) FDCAN2->TXBAR |= BIT(0); // Set Tx buffer request pending (TFRP) for buffer 0
     else if (put_index == 1) FDCAN2->TXBAR |= BIT(1); // Set Tx buffer request pending (TFRP) for buffer 1
     else if (put_index == 2) FDCAN2->TXBAR |= BIT(2); // Set Tx buffer request pending (TFRP) for buffer 2
-   return true; // Message sent successfully
+    return true; // Message sent successfully --> only true to if check if Tx FIFO is empty
+    // Note: The function does not check for Tx FIFO full condition
+    // and assumes that the caller has already checked the FIFO status. ---->>> need to check!!
+    // need to check error status in main!
 }
 
 
