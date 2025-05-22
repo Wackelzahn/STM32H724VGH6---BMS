@@ -27,7 +27,7 @@ bool INA228_Init(void) {
     
     // INA228 Set Shunt voltage Range to +/-40.96mV
     // equals max shunt current (250uOhm) at 163.84A
-    if (INA228_WriteRegister(0x00, 0x0008)){   
+    if (INA228_WriteRegister(0x00, 0b0000000000010000)){   
     }                                           
     else return false;   // failure
     

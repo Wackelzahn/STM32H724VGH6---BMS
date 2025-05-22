@@ -2,7 +2,7 @@
 // Created: 2025-03-19 07:00:00
 // Author: M. Schneider
 // -----------------------------------------------------
-// Target Device: STM32FF439ZI
+// Target Device: STM32G0B1KEU6
 // -----------------------------------------------------
 // Programming Language: C, pure bare metal (no CMSIS)
 //
@@ -80,7 +80,6 @@ bool Can_Init(void) {
     // NTS1 = 10 (11 tq), NTS2 = 3 (4 tq), SJW = 1 (2 tq)
     // Total bit time = 1 + 11 + 4 = 16 tq
     // Bit rate = 8 MHz / 16 = 500 Kbps
-
     FDCAN2->NBTP =  (3 << 25) |         // NTSEG2 (value - 1)
                     (1 << 16) |         // NTSEG1 (value - 1)
                     (10 << 8) |         // NBRP (value - 1)
@@ -91,16 +90,14 @@ bool Can_Init(void) {
     // NTSEG2 = 3 (register value) → DTSEG2 = 3
     // NTSEG1 = 10 (register value) → DTSEG1 = 10
     // NBRP = 1 (register value) → DBRP = 1
-
     FDCAN2->DBTP = (1U << 16) |          // DBRP register
                    (3U << 8) |           // DTSEG1 register
                    (10U << 4) |          // DTSEG2 register
                    (3U << 0);            // DSJW register
                
 
-    // Configure message RAM (no! message RAM for FDCAN1)
     // Standart filter configuration (1 Filter, accept only 0x127 ID to Rx FIFO 0)
-    // SFID2 = 0x7FF; // Filter Mask (basically no mask only ID1 accepted)
+    // SFID2 = 0x0127; // only ID1 accepted
     // SFID1 = 0x0127; // Filter ID 1
     // SFEC = 0b001; // If match, store in Rx FIFO0
     // SFT = 0b10; // Standard ID filter type (Filter and Mask)
@@ -109,15 +106,15 @@ bool Can_Init(void) {
         FDCAN2_StandartMessageIDFilter[i] = 0x00000000U;  // equal to FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset
     }
 
-    // Set filter 0 to accept ID 0x127
+    // Set filter 0(1) to accept ID 0x127(0x0128)
     FDCAN2_StandartMessageIDFilter[0] = (0x127U << 0) |(0x127U << 16) |(0b001U << 27) |(0b10U << 30); 
     FDCAN2_StandartMessageIDFilter[1] = (0x128U << 0) |(0x128U << 16) |(0b001U << 27) |(0b10U << 30); 
 
     // Configure global filter settings
     // Set RRFE = 1 (reject extended frames), Set ANFE = 0b11 Reject non-matching frames
     // Set ANFE = 0b11 (reject non-matching frames), Set LSS = 0b00001 (1 standart filter)
-    FDCAN2->RXGFC = (1U << 0) |     // Reject all remote frames with 29bit ID (RRFE = 1)
-                    (1U << 1) |     // Reject all remote frames with 11bit ID (RRFE = 1)
+    FDCAN2->RXGFC = (1U << 0) |     // Reject all "remote" frames with 29bit ID (RRFE = 1)
+                    (1U << 1) |     // Reject all "remote" frames with 11bit ID (RRFE = 1)
                     (0b11 << 2) |   // Reject non-matching frames (ANFE = 0b11) 11bit ID
                     (0b11 << 4) |   // Reject non matching 11 bit ID's
                     (2U << 16);     // Set LSS = 0b00010 (two standard filter)
@@ -148,6 +145,8 @@ bool Can_Init(void) {
     
     return true;                     // Return success
 }
+
+
 
 //  function for sending a standart CAN frame through FDCAN2 Interface
 //  ------------------------------------

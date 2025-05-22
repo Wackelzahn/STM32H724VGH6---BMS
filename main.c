@@ -5,11 +5,12 @@
 // -----------------------------------------------------
 // Target Device: STM32G0B1KEU6
 // -----------------------------------------------------
-// Programming Language: C, bare metal
+// Programming Language: C, pure bare metal (no CMSIS)
 //
-// This is a test program for the STM32F411RE to explore
-// the capabilities of the STM32F411RE microcontroller.
-// The program is intended to create 
+// This is a the program for the STM32G0B1 to collect 
+// data from the INA228 and send it over CAN bus.
+// 
+// The program is using
 //    - an accurate base tick (10ms) (SYSTICK IRQ)
 //    - GPIO output
 //    - SPI communication
@@ -30,16 +31,23 @@
 //#include "VEcan.h"
 #include "INA228.h"
 
+
+//------------------------------------------------------------
+// Global variables
+//------------------------------------------------------------
+
 uint8_t x=0;
 uint32_t can_receive_FifO0 = 55;
 uint32_t temp;
 
-uint32_t Sprong1, Sprong2, Kaponk4, Power_mW; 
+uint32_t Sprong1, Sprong2, Kaponk4, Power_mW, INA228_Power; 
 uint64_t Kaponk, Energy_Joule;
 uint64_t Kagong;
 uint16_t vbus, vbus_mV, INA228_DieID, INA228_ManufacturerID;
 int32_t Current_mA, Kaponk2, INA228_ShuntVltg, ShuntV_uV;
 int16_t INA228_Temp, Temperature;
+
+uint8_t zonk = 0;  
 
 volatile uint8_t rx_flag = 0;
 volatile uint8_t rx_received[8];
@@ -53,14 +61,44 @@ uint32_t one_sec_tick = 0;
 
 
 CAN_TxBufferElement Tx_Temperature = {
-  .T0 = (0x427U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x127, Data frame
+  .T0 = (0x426U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x426, Data frame
   .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {1, 2, 3, 4, 5, 6, 7, 8} // Data bytes
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
 };
 
+CAN_TxBufferElement Tx_ShuntVoltage = {
+  .T0 = (0x427U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x427, Data frame
+  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
+};
 
+CAN_TxBufferElement Tx_VBus_Voltage = {
+  .T0 = (0x428U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x428, Data frame
+  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
+};
 
+CAN_TxBufferElement Tx_Current = {
+  .T0 = (0x429U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x429, Data frame
+  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
+};
 
+CAN_TxBufferElement Tx_Power = {
+  .T0 = (0x42AU << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x42A, Data frame
+  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
+};
+
+CAN_TxBufferElement Tx_DieID = {
+  .T0 = (0x42BU << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x42B, Data frame
+  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
+  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
+};
+
+//------------------------------------------------------------
+// Init Functions
+//------------------------------------------------------------
 
 static inline void init_clock(void) {
   RCC->CR |= (1U << 8);              // HSI16 clock enable
@@ -102,6 +140,9 @@ static inline void PB4_out_init() {
 }
 
 
+//------------------------------------------------------------
+// Main function
+//------------------------------------------------------------
 
 int main(void) {
 
@@ -121,31 +162,44 @@ int main(void) {
     x--;
   } 
 
-
-
   while (1) {
 
 
-  // FDCAN2_Send_Std_CAN_Message();
-
   if (INA228_ReadTemp(&INA228_Temp)) {
-    Temperature = INA228_Temp;
-    Tx_Temperature.data[0] = (uint8_t)(Temperature >> 8); // Store temperature in Tx buffer
-    Tx_Temperature.data[1] = (uint8_t)(Temperature & 0xFF);
-    (void)Temperature;  // preventing compiler complained for not being used.
+    Tx_Temperature.data[0] = (uint8_t)(INA228_Temp >> 8); // Store temperature in Tx buffer
+    Tx_Temperature.data[1] = (uint8_t)(INA228_Temp & 0xFF);
     }
 
   if (INA228_ReadShuntV(&INA228_ShuntVltg)) {
-    ShuntV_uV = INA228_ShuntVltg;
-    (void)ShuntV_uV;
+    Tx_ShuntVoltage.data[0] = (uint8_t)(INA228_ShuntVltg >> 24); // Store shunt voltage in Tx buffer
+    Tx_ShuntVoltage.data[1] = (uint8_t)(INA228_ShuntVltg >> 16);
+    Tx_ShuntVoltage.data[2] = (uint8_t)(INA228_ShuntVltg >> 8);
+    Tx_ShuntVoltage.data[3] = (uint8_t)(INA228_ShuntVltg & 0xFF);
     }
 
+
 if (INA228_ReadDieID(&INA228_DieID)) {
-    (void)INA228_DieID;
+    Tx_DieID.data[0] = (uint8_t)(INA228_DieID >> 8); // Store die ID in Tx buffer
+    Tx_DieID.data[1] = (uint8_t)(INA228_DieID & 0xFF);
     }
-if (INA228_ReadManufacturerID(&INA228_ManufacturerID)) {
-    (void)INA228_ManufacturerID;
+
+if (INA228_ReadPower(&INA228_Power)) {
+    Tx_Power.data[0] = (uint8_t)(INA228_Power >> 24); // Store power in Tx buffer
+    Tx_Power.data[1] = (uint8_t)(INA228_Power >> 16);
+    Tx_Power.data[2] = (uint8_t)(INA228_Power >> 8);
+    Tx_Power.data[3] = (uint8_t)(INA228_Power & 0xFF);
     }
+if (INA228_ReadVBUS(&vbus)) {
+    Tx_VBus_Voltage.data[0] = (uint8_t)(vbus >> 8); // Store VBUS in Tx buffer
+    Tx_VBus_Voltage.data[1] = (uint8_t)(vbus & 0xFF);
+    }
+if (INA228_ReadCurr(&Current_mA)) {
+    Tx_Current.data[0] = (uint8_t)(Current_mA >> 24); // Store current in Tx buffer
+    Tx_Current.data[1] = (uint8_t)(Current_mA >> 16);
+    Tx_Current.data[2] = (uint8_t)(Current_mA >> 8);
+    Tx_Current.data[3] = (uint8_t)(Current_mA & 0xFF);
+    }
+
 
 
   if (rx_flag) {
@@ -153,19 +207,35 @@ if (INA228_ReadManufacturerID(&INA228_ManufacturerID)) {
     // Do something with rx_received[8]
     }
 
-    if (one_sec_tick >= 1000) { // 1 second tick
+  if (one_sec_tick >= 50) { // 1/2 second tick
       one_sec_tick = 0;
+      if (zonk == 0) FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
+      if (zonk == 1) FDCAN2_Send_Std_CAN_Message(&Tx_ShuntVoltage);
+      if (zonk == 2) FDCAN2_Send_Std_CAN_Message(&Tx_VBus_Voltage);
+      if (zonk == 3) FDCAN2_Send_Std_CAN_Message(&Tx_Current);
+      if (zonk == 4) FDCAN2_Send_Std_CAN_Message(&Tx_Power);
+      if (zonk == 5) FDCAN2_Send_Std_CAN_Message(&Tx_DieID);
+      zonk++;
+      if (zonk >= 6) zonk = 0; // Reset the flag
       // Do something every second
       // For example, send a message over CAN
       //FDCAN2_Send_Std_CAN_Message();
-      FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
+           
       GPIOB->ODR ^= (1 << 4); // Toggle PB4
-    }
+      }
+    
 
   }
 
 
 }
+
+
+
+//------------------------------------------------------------
+// Interrupt Handlers
+//------------------------------------------------------------
+
 
 // SysTick interrupt handler
 void SysTick_IRQHandler(void){
