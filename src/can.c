@@ -124,7 +124,15 @@ bool Can_Init(void) {
     FDCAN2->IE |= BIT(0);           // Rx FIFO 0 new message interrupt enable
     FDCAN2->ILE |= BIT(0);          // Enable IT0 line to NVIC (to enable IT1 set to 1))
 
-    NVIC->ISER[0] |= (1 << 21);     // Enable FDCAN2 interrupt in NVIC (IRQ21)
+    // Configure interrupt for Tx buffer transmission complete
+    FDCAN2->IE |= BIT(7);          // Tx buffer transmission complete interrupt enable
+    FDCAN2->IE |= BIT(10);         // Tx buffer transmission complete interrupt enable
+    FDCAN2->ILS &= ~(1U << 7);      // Assign TC (Transmission Complete) to IT0 (clear bit 7)
+
+    // tet
+    FDCAN2->IR = 0;          // Clear all interrupt flags
+
+    NVIC->ISER[0] |= (1U << 21);    // Enable FDCAN2 interrupt in NVIC (IRQ21)
     NVIC->IPR[21] = (0 << 6);       // Set NVIC interrupt priority
 
     // Start FDCAN operation
@@ -159,10 +167,10 @@ bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
     FDCAN2->TXBC &= ~BIT(24); // TX fifo operatioon mode
 
     uint32_t txfqs = FDCAN2->TXFQS; // Get Tx FIFO queue status
-    uint32_t free_level = (txfqs &= 0x7U); // Get free level (TFFL) of Tx FIFO
+    uint32_t free_level = (txfqs & 0x7U); // Get free level (TFFL) of Tx FIFO
     
     if (free_level == 0) { // Check if Tx FIFO is empty
-        return false; // Tx FIFO is full, cannot send message
+        return false; // Tx FIFO is full
     }
     
     uint8_t put_index = (txfqs >> 16) & 0x3U; // Put index (TFQPI)

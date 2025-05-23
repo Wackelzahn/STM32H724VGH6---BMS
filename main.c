@@ -43,9 +43,11 @@ uint32_t temp;
 uint32_t Sprong1, Sprong2, Kaponk4, Power_mW, INA228_Power; 
 uint64_t Kaponk, Energy_Joule;
 uint64_t Kagong;
-uint16_t vbus, vbus_mV, INA228_DieID, INA228_ManufacturerID;
+uint16_t vbus, vbus_mV, INA228_DieID, INA228_ManufacturerID, test;
 int32_t Current_mA, Kaponk2, INA228_ShuntVltg, ShuntV_uV;
 int16_t INA228_Temp, Temperature;
+
+uint8_t msg_counter = 0;
 
 uint8_t zonk = 0;  
 
@@ -135,8 +137,8 @@ static inline void PB4_out_init() {
     GPIOB->OSPEEDR |= (1U << (4 * 2));   // Set as medium speed (01) for pin 4
     // No pull-up needed since LED circuit provides the pull to VCC
     GPIOB->PUPDR &= ~(3U << (4 * 2));    // Clear PUPD bits (00 = no pull-up/down)
-  GPIOB->ODR &= ~(1U << 4);           // Clear PB4
-  GPIOB->ODR |= (1U << 4);            // Set PB4
+    GPIOB->ODR &= ~(1U << 4);           // Clear PB4
+    GPIOB->ODR |= (1U << 4);            // Set PB4
 }
 
 
@@ -145,6 +147,8 @@ static inline void PB4_out_init() {
 //------------------------------------------------------------
 
 int main(void) {
+
+
 
   init_clock();             // Initialize system clock
   systick_init();   // 1s second (STM32G0 runs at 16MHz)
@@ -207,26 +211,17 @@ if (INA228_ReadCurr(&Current_mA)) {
     // Do something with rx_received[8]
     }
 
-  if (one_sec_tick >= 50) { // 1/2 second tick
+
+  if (one_sec_tick >= 200) { // 1/2 second tick
       one_sec_tick = 0;
-      if (zonk == 0) FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
-      if (zonk == 1) FDCAN2_Send_Std_CAN_Message(&Tx_ShuntVoltage);
-      if (zonk == 2) FDCAN2_Send_Std_CAN_Message(&Tx_VBus_Voltage);
-      if (zonk == 3) FDCAN2_Send_Std_CAN_Message(&Tx_Current);
-      if (zonk == 4) FDCAN2_Send_Std_CAN_Message(&Tx_Power);
-      if (zonk == 5) FDCAN2_Send_Std_CAN_Message(&Tx_DieID);
-      zonk++;
-      if (zonk >= 6) zonk = 0; // Reset the flag
-      // Do something every second
-      // For example, send a message over CAN
-      //FDCAN2_Send_Std_CAN_Message();
-           
+      FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
+      msg_counter++;
+      // send the remaining messages fia Interrupt
       GPIOB->ODR ^= (1 << 4); // Toggle PB4
       }
     
 
   }
-
 
 }
 
@@ -250,10 +245,11 @@ void SysTick_IRQHandler(void){
   // This function is called when a message is received
   // Check if there is a message in FIFO0
 void TIM16_FDCAN_IT0_IRQHandler(void) {
+  
   uint32_t ir = FDCAN2->IR;
 
+  // Received Interrupt routine
   if (ir & 0x1U) {  // Check (RF0N) if there is a message in FIFO0
-    
       // Get the FIFO status
       uint32_t rxf0s = FDCAN2->RXF0S;
       uint8_t get_index = (rxf0s >> 8) & 0x3U;  // Get index (F0GI)
@@ -274,15 +270,34 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
         memcpy((void*)HostCommand, ptr->data, 8); // Read the message from FIFO0
       }
    
-    rx_flag = 1; // Set the flag to indicate that a message has been received
-    FDCAN2->RXF0A = get_index; // Release the FIFO element
-   
-    FDCAN2->IR = 0x1U;      // Clear interrupt flag by writing 1 to it
+      rx_flag = 1; // Set the flag to indicate that a message has been received
+      FDCAN2->RXF0A = get_index; // Release the FIFO element
+      FDCAN2->IR = 0x1U;      // Clear interrupt flag by writing 1 to it
+      }
+  }
 
-    }
-  // potential Transmit interrupt routine
-  
-}
+  // Transmit interrupt routine
+  if (ir & (1U << 7)) {
+    msg_counter++;
+    if (msg_counter >= 7) {
+      msg_counter = 0;
+    } else if (msg_counter == 2) {
+        FDCAN2_Send_Std_CAN_Message(&Tx_ShuntVoltage);
+      } else if (msg_counter == 3) {
+        FDCAN2_Send_Std_CAN_Message(&Tx_VBus_Voltage);
+      } else if (msg_counter == 4) {
+        FDCAN2_Send_Std_CAN_Message(&Tx_Current);
+      } else if (msg_counter == 5) {
+        FDCAN2_Send_Std_CAN_Message(&Tx_Power);
+      } else if (msg_counter == 6) {
+        FDCAN2_Send_Std_CAN_Message(&Tx_DieID);
+      }
+    
+
+
+    // Clear the interrupt flag
+    FDCAN2->IR = (1U << 7); // Clear the transmit interrupt flag
+  }
 }
 
 

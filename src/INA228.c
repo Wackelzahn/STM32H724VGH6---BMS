@@ -13,6 +13,7 @@ bool INA228_Init(void) {
     // Set to bus voltage continuous mode
     
     I2C1_Init();
+    uint16_t help = 0;
 
     // INA228 RESET
     if (INA228_WriteRegister(0x00, 0x8000)){  
@@ -20,14 +21,17 @@ bool INA228_Init(void) {
     else return false;   // failure
 
     // INA228 Set ADC sample averaging count to 16
-    // Conversion times to 1052 μs
-    if (INA228_WriteRegister(0x01, 0xFB6A)){    
+    // Conversion time for temperature to 540μs, for shunt voltage to 4120μs and bus voltage to 540μs
+    // Mode set to "continuous" bus, shunt and temperature measurement
+    help = (0x2U << 0) | (0x4U << 3) | (0x7U << 6) | (0x4U << 9) | (0xFU << 12);
+    if (INA228_WriteRegister(0x01, help)){    
     }
     else return false;   // failure
     
     // INA228 Set Shunt voltage Range to +/-40.96mV
     // equals max shunt current (250uOhm) at 163.84A
-    if (INA228_WriteRegister(0x00, 0b0000000000010000)){   
+    // Enable Temperature Compensation 
+    if (INA228_WriteRegister(0x00, 0b0000000000110000)){   
     }                                           
     else return false;   // failure
     
@@ -40,7 +44,7 @@ bool INA228_Init(void) {
     
     // INA228 Temperature coefficient
     // Set to 40 ppm/°C --> In the Range of appr. 25°C to 50°C
-    // 0x0028U = 40 ppm/°C
+    // 0x0028U = 40 ppm/°C (according to Datasheet)
     if (INA228_SetShuntTempco(0x0028U)){    
     }                                           
     else return false;   // failure
