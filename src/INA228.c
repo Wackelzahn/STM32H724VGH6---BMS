@@ -210,3 +210,15 @@ bool INA228_ReadDieID(uint16_t *devID) {
     
     return true;
 }
+
+
+bool INA228_ReadCharge(int64_t *charge) {
+    uint8_t charge_data[5];
+    if (!(INA228_ReadRegister(0x0A, charge_data, 5))) return false;  
+    int64_t charge_raw = ((int64_t)charge_data[0] << 32) | ((int64_t)charge_data[1] << 24) | ((int64_t)charge_data[2] << 16) | ((int64_t)charge_data[3] << 8) | ((int64_t)charge_data[4] << 0);
+    *charge = charge_raw;
+    
+    return true;
+}
+
+

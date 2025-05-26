@@ -36,16 +36,19 @@
 // Global variables
 //------------------------------------------------------------
 
+
+
 uint8_t x=0;
+uint8_t y=0;
 uint32_t can_receive_FifO0 = 55;
 uint32_t temp;
 
-uint32_t Sprong1, Sprong2, Kaponk4, Power_mW, INA228_Power; 
-uint64_t Kaponk, Energy_Joule;
+uint32_t Sprong1, Sprong2, Kaponk4, INA228_Power_mW; 
+uint64_t Kaponk, INA228_Energy_Joule;
 uint64_t Kagong;
-uint16_t vbus, vbus_mV, INA228_DieID, INA228_ManufacturerID, test;
-int32_t Current_mA, Kaponk2, INA228_ShuntVltg, ShuntV_uV;
-int16_t INA228_Temp, Temperature;
+uint16_t INA228_vbus, INA228_DieID, INA228_ManufacturerID, test;
+int32_t INA228_Current_mA, INA228_ShuntVltg;
+int16_t INA228_Temp;
 
 uint8_t msg_counter = 0;
 
@@ -61,42 +64,8 @@ uint32_t one_sec_tick = 0;
 #define FREQ 16000000  // PCLK, internal clock by default, 16 Mhz
 #define BIT(x) (1UL << (x))
 
+CAN_TxBufferElement TxFrames[8]; // Array to hold Tx frames
 
-CAN_TxBufferElement Tx_Temperature = {
-  .T0 = (0x426U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x426, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
-
-CAN_TxBufferElement Tx_ShuntVoltage = {
-  .T0 = (0x427U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x427, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
-
-CAN_TxBufferElement Tx_VBus_Voltage = {
-  .T0 = (0x428U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x428, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
-
-CAN_TxBufferElement Tx_Current = {
-  .T0 = (0x429U << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x429, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
-
-CAN_TxBufferElement Tx_Power = {
-  .T0 = (0x42AU << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x42A, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
-
-CAN_TxBufferElement Tx_DieID = {
-  .T0 = (0x42BU << 18) | (0U << 29) | (0U << 30) | (0U << 31), // ID = 0x42B, Data frame
-  .T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23), // 8 byte, classic CAN
-  .data = {0, 0, 0, 0, 0, 0, 0, 0} // Data bytes
-};
 
 //------------------------------------------------------------
 // Init Functions
@@ -141,6 +110,81 @@ static inline void PB4_out_init() {
     GPIOB->ODR |= (1U << 4);            // Set PB4
 }
 
+// -----------------------------------------------------------
+// Read INA228 values and fill TxFrames function
+// -----------------------------------------------------------
+
+bool INA228_Read_Values (CAN_TxBufferElement *TxINAFrames) {
+  // Read INA228 values and fill TxFrames
+  
+  if (INA228_ReadCurr(&INA228_Current_mA)) {
+    TxINAFrames[0].data[0] = (uint8_t)(INA228_Current_mA >> 24);   // Store current in Tx buffer frame 0
+    TxINAFrames[0].data[1] = (uint8_t)(INA228_Current_mA >> 16);
+    TxINAFrames[0].data[2] = (uint8_t)(INA228_Current_mA >> 8);
+    TxINAFrames[0].data[3] = (uint8_t)(INA228_Current_mA & 0xFF);
+  } else {
+    return false; // Error reading current
+  }
+
+  if (INA228_ReadVBUS(&INA228_vbus)) {
+    TxINAFrames[1].data[0] = (uint8_t)(INA228_vbus >> 8);        // Store VBUS in Tx buffer
+    TxINAFrames[1].data[1] = (uint8_t)(INA228_vbus & 0xFF);
+  } else {
+    return false; // Error reading VBUS
+  }
+    
+  if (INA228_ReadTemp(&INA228_Temp)) {
+    TxINAFrames[2].data[0] = (uint8_t)(INA228_Temp >> 8);        // Store temperature in Tx buffer
+    TxINAFrames[2].data[1] = (uint8_t)(INA228_Temp & 0xFF);
+  } else {
+    return false; // Error reading temperature
+  }
+
+  if (INA228_ReadShuntV(&INA228_ShuntVltg)) {
+    TxINAFrames[3].data[0] = (uint8_t)(INA228_ShuntVltg >> 24); // Store shunt voltage in Tx buffer
+    TxINAFrames[3].data[1] = (uint8_t)(INA228_ShuntVltg >> 16);
+    TxINAFrames[3].data[2] = (uint8_t)(INA228_ShuntVltg >> 8);
+    TxINAFrames[3].data[3] = (uint8_t)(INA228_ShuntVltg & 0xFF);
+  } else {
+    return false; // Error reading shunt voltage
+  }
+
+  if (INA228_ReadPower(&INA228_Power_mW)) {
+    TxINAFrames[4].data[0] = (uint8_t)(INA228_Power_mW >> 24); // Store power in Tx buffer
+    TxINAFrames[4].data[1] = (uint8_t)(INA228_Power_mW >> 16);
+    TxINAFrames[4].data[2] = (uint8_t)(INA228_Power_mW >> 8);
+    TxINAFrames[4].data[3] = (uint8_t)(INA228_Power_mW & 0xFF);
+  } else {
+    return false; // Error reading power
+  }
+
+  if (INA228_ReadDieID(&INA228_DieID)) {
+    TxINAFrames[5].data[0] = (uint8_t)(INA228_DieID >> 8); // Store die ID in Tx buffer
+    TxINAFrames[5].data[1] = (uint8_t)(INA228_DieID & 0xFF);
+  } else {
+    return false; // Error reading die ID
+  }
+
+  if (INA228_ReadManufacturerID(&INA228_ManufacturerID)) {
+    TxINAFrames[6].data[0] = (uint8_t)(INA228_ManufacturerID >> 8); // Store manufacturer ID in Tx buffer
+    TxINAFrames[6].data[1] = (uint8_t)(INA228_ManufacturerID & 0xFF);
+  } else {
+    return false; // Error reading manufacturer ID
+  }
+
+  if (INA228_ReadEnergy(&INA228_Energy_Joule)) {
+    TxINAFrames[7].data[0] = (uint8_t)(INA228_Energy_Joule >> 24); // Store power in Tx buffer
+    TxINAFrames[7].data[1] = (uint8_t)(INA228_Energy_Joule >> 16);
+    TxINAFrames[7].data[2] = (uint8_t)(INA228_Energy_Joule >> 8);
+    TxINAFrames[7].data[3] = (uint8_t)(INA228_Energy_Joule& 0xFF);
+  } else {
+    return false; // Error reading power
+  }
+
+
+  return true;
+}
+
 
 //------------------------------------------------------------
 // Main function
@@ -148,83 +192,42 @@ static inline void PB4_out_init() {
 
 int main(void) {
 
-
-
-  init_clock();             // Initialize system clock
-  systick_init();   // 1s second (STM32G0 runs at 16MHz)
-  PA2_out_init();           // Test output PA2
-  PB4_out_init();           // Test output PB4
-  if (INA228_Init()){
-    x++;
-  };                  // Initialize INA228 
+  init_clock();           // Initialize system clock
+  systick_init();         // 1s second (STM32G0 runs at 16MHz)
+  PA2_out_init();         // Test output PA2
+  PB4_out_init();         // Test output PB4
+  INA228_Init();          // Initialize INA228 
 
   Can_Init();         // Initialize CAN
 
-  if (FDCAN2_Send_Std_CAN_Message(&Tx_Temperature)) {
-    x++;
-  } else {
-    x--;
-  } 
+  Init_FDCAN_INA228_Message(&TxFrames[0]); // Initialize FDCAN messages with ID's starting from 0x426U
+  // Element [0] is highest priority --> used for current [mA], etc...
+  // Element [7] is lowest priority --> used for DieID
+
 
   while (1) {
 
-
-  if (INA228_ReadTemp(&INA228_Temp)) {
-    Tx_Temperature.data[0] = (uint8_t)(INA228_Temp >> 8); // Store temperature in Tx buffer
-    Tx_Temperature.data[1] = (uint8_t)(INA228_Temp & 0xFF);
-    }
-
-  if (INA228_ReadShuntV(&INA228_ShuntVltg)) {
-    Tx_ShuntVoltage.data[0] = (uint8_t)(INA228_ShuntVltg >> 24); // Store shunt voltage in Tx buffer
-    Tx_ShuntVoltage.data[1] = (uint8_t)(INA228_ShuntVltg >> 16);
-    Tx_ShuntVoltage.data[2] = (uint8_t)(INA228_ShuntVltg >> 8);
-    Tx_ShuntVoltage.data[3] = (uint8_t)(INA228_ShuntVltg & 0xFF);
-    }
-
-
-if (INA228_ReadDieID(&INA228_DieID)) {
-    Tx_DieID.data[0] = (uint8_t)(INA228_DieID >> 8); // Store die ID in Tx buffer
-    Tx_DieID.data[1] = (uint8_t)(INA228_DieID & 0xFF);
-    }
-
-if (INA228_ReadPower(&INA228_Power)) {
-    Tx_Power.data[0] = (uint8_t)(INA228_Power >> 24); // Store power in Tx buffer
-    Tx_Power.data[1] = (uint8_t)(INA228_Power >> 16);
-    Tx_Power.data[2] = (uint8_t)(INA228_Power >> 8);
-    Tx_Power.data[3] = (uint8_t)(INA228_Power & 0xFF);
-    }
-if (INA228_ReadVBUS(&vbus)) {
-    Tx_VBus_Voltage.data[0] = (uint8_t)(vbus >> 8); // Store VBUS in Tx buffer
-    Tx_VBus_Voltage.data[1] = (uint8_t)(vbus & 0xFF);
-    }
-if (INA228_ReadCurr(&Current_mA)) {
-    Tx_Current.data[0] = (uint8_t)(Current_mA >> 24); // Store current in Tx buffer
-    Tx_Current.data[1] = (uint8_t)(Current_mA >> 16);
-    Tx_Current.data[2] = (uint8_t)(Current_mA >> 8);
-    Tx_Current.data[3] = (uint8_t)(Current_mA & 0xFF);
-    }
-
-
-
-  if (rx_flag) {
-    rx_flag = 0;        // check for message id and store the data
-    // Do something with rx_received[8]
-    }
-
-
-  if (one_sec_tick >= 200) { // 1/2 second tick
-      one_sec_tick = 0;
-      FDCAN2_Send_Std_CAN_Message(&Tx_Temperature);
-      msg_counter++;
-      // send the remaining messages fia Interrupt
-      GPIOB->ODR ^= (1 << 4); // Toggle PB4
-      }
     
-
+    if (one_sec_tick >= 100) { // 1/2 second tick
+        one_sec_tick = 0;
+        INA228_Read_Values(&TxFrames[0]); // Read INA228 data and fill TxFrames
+        msg_counter = 0;                  // Reset msg_counter to 0
+          for (uint8_t i = 0; i < 8; i++) {
+              if (FDCAN2_Send_Std_CAN_Message(&TxFrames[i])) {
+                msg_counter = i; // Set msg_counter to the current frame index
+                } else {
+                  i = 8; // Exit loop if sending fails
+                  msg_counter++; // Point to next message to be send by Interrupt Routine
+                }
+          }
+          // send the remaining messages fia Interrupt
+          FDCAN2->IE |= BIT(9);   // Tx FIFO empty interrupt enable
+          FDCAN2->IR = 0;         // Clear all interrupt flags
+      
+          GPIOB->ODR ^= (1 << 4); // Toggle PB4
+    }
   }
-
 }
-
 
 
 //------------------------------------------------------------
@@ -238,8 +241,8 @@ void SysTick_IRQHandler(void){
   // This function is called every 1ms
   GPIOA->ODR ^= (1 << 2);  // Toggle PA2
   one_sec_tick++;         // Increment the tick counter
-  
 }
+
 
 // FDCAN interrupt handler
   // This function is called when a message is received
@@ -265,39 +268,39 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
 
       // Process based on message ID
       if (MsgID == 0x127) {
-        memcpy((void*)HostStatus, ptr->data, 8); // Read the message from FIFO0
+        memcpy((void*)HostStatus, ptr->data, 8);  // Read the message from FIFO0
       } else if (MsgID == 0x128) {
         memcpy((void*)HostCommand, ptr->data, 8); // Read the message from FIFO0
       }
    
       rx_flag = 1; // Set the flag to indicate that a message has been received
-      FDCAN2->RXF0A = get_index; // Release the FIFO element
-      FDCAN2->IR = 0x1U;      // Clear interrupt flag by writing 1 to it
+      FDCAN2->RXF0A = get_index;  // Release the FIFO element
+      FDCAN2->IR = 0x1U;          // Clear interrupt flag by writing 1 to it
       }
   }
 
   // Transmit interrupt routine
-  if (ir & (1U << 7)) {
-    msg_counter++;
-    if (msg_counter >= 7) {
-      msg_counter = 0;
-    } else if (msg_counter == 2) {
-        FDCAN2_Send_Std_CAN_Message(&Tx_ShuntVoltage);
-      } else if (msg_counter == 3) {
-        FDCAN2_Send_Std_CAN_Message(&Tx_VBus_Voltage);
-      } else if (msg_counter == 4) {
-        FDCAN2_Send_Std_CAN_Message(&Tx_Current);
-      } else if (msg_counter == 5) {
-        FDCAN2_Send_Std_CAN_Message(&Tx_Power);
-      } else if (msg_counter == 6) {
-        FDCAN2_Send_Std_CAN_Message(&Tx_DieID);
+  if (ir & (1U << 9)) {           // Check if Tx FIFO is empty (TXFE)
+    x++;                          // for testing to check how many TFEs were sent
+    y = msg_counter; 
+    if (msg_counter >= 8) {       // Do nothing, all messages send
+      FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
+    } 
+    else {                        // Send the next message
+        for (y = y; y < 8; y++) {
+        if (FDCAN2_Send_Std_CAN_Message(&TxFrames[msg_counter])) {    // send the next message package until FIFO is full again
+        msg_counter++; // Increment msg_counter if message was sent successfully
+        }
+        FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
       }
-    
+    }
 
-
-    // Clear the interrupt flag
-    FDCAN2->IR = (1U << 7); // Clear the transmit interrupt flag
   }
 }
+  
+
+
+  
+
 
 

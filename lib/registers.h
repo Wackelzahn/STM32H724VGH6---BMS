@@ -82,21 +82,6 @@ struct fdcan {
 #define FDCAN2 ((struct fdcan *) 0x40006800)
 
 
-typedef struct {
-  uint32_t T0;
-  uint32_t T1;
-  uint8_t data[8];
-  uint32_t reserved[14]; // reserved bytes
-} CAN_TxBufferElement;
-
-// FDCAN Receive Message RAM structure , only 8 bytes of data are used. 
-typedef struct {
-  uint32_t R0;
-  uint32_t R1;
-  uint8_t data[8];
-  uint32_t reserved[14]; // reserved bytes
-} CAN_RxBufferElement;
-
 
 // FDCAN Message RAM base address
 #define FDCAN_MESSAGE_RAM_BASE    0x4000B400

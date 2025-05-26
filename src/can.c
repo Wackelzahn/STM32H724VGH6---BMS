@@ -124,13 +124,6 @@ bool Can_Init(void) {
     FDCAN2->IE |= BIT(0);           // Rx FIFO 0 new message interrupt enable
     FDCAN2->ILE |= BIT(0);          // Enable IT0 line to NVIC (to enable IT1 set to 1))
 
-    // Configure interrupt for Tx buffer transmission complete
-    FDCAN2->IE |= BIT(7);          // Tx buffer transmission complete interrupt enable
-    FDCAN2->IE |= BIT(10);         // Tx buffer transmission complete interrupt enable
-    FDCAN2->ILS &= ~(1U << 7);      // Assign TC (Transmission Complete) to IT0 (clear bit 7)
-
-    // tet
-    FDCAN2->IR = 0;          // Clear all interrupt flags
 
     NVIC->ISER[0] |= (1U << 21);    // Enable FDCAN2 interrupt in NVIC (IRQ21)
     NVIC->IPR[21] = (0 << 6);       // Set NVIC interrupt priority
@@ -153,6 +146,21 @@ bool Can_Init(void) {
     
     return true;                     // Return success
 }
+
+
+bool Init_FDCAN_INA228_Message(CAN_TxBufferElement *Frame) {
+    for (uint8_t i = 0; i < 8; i++) {
+        Frame[i].T0 = ((0x426U + i) << 18) | (0U << 29) | (0U << 30) | (0U << 31); // ID = 0x426, Data frame
+        Frame[i].T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23); // 8 byte, classic CAN
+            for (int j = 0; j < 8; j++) {
+                Frame[i].data[j] = 0; // Initialize data bytes to 0
+            }
+    }
+    return true; // Return success
+}
+
+
+
 
 
 
