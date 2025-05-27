@@ -44,7 +44,8 @@ bool INA228_ReadEnergy(uint64_t *energy);
 bool INA228_ReadManufacturerID(uint16_t *manufID);
 // Read Die ID
 bool INA228_ReadDieID(uint16_t *dieID);
-
+// Read charge in Coulombs
+bool INA228_ReadCharge(int64_t *charge);
 
 
 

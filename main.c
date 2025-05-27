@@ -43,12 +43,12 @@ uint8_t y=0;
 uint32_t can_receive_FifO0 = 55;
 uint32_t temp;
 
-uint32_t Sprong1, Sprong2, Kaponk4, INA228_Power_mW; 
-uint64_t Kaponk, INA228_Energy_Joule;
-uint64_t Kagong;
+uint32_t INA228_Power_mW; 
+uint64_t INA228_Energy_Joule;
 uint16_t INA228_vbus, INA228_DieID, INA228_ManufacturerID, test;
 int32_t INA228_Current_mA, INA228_ShuntVltg;
 int16_t INA228_Temp;
+int64_t INA228_Charge_Coulombs;
 
 uint8_t msg_counter = 0;
 
@@ -64,7 +64,7 @@ uint32_t one_sec_tick = 0;
 #define FREQ 16000000  // PCLK, internal clock by default, 16 Mhz
 #define BIT(x) (1UL << (x))
 
-CAN_TxBufferElement TxFrames[8]; // Array to hold Tx frames
+CAN_TxBufferElement TxFrames[9]; // Array to hold Tx frames
 
 
 //------------------------------------------------------------
@@ -173,14 +173,30 @@ bool INA228_Read_Values (CAN_TxBufferElement *TxINAFrames) {
   }
 
   if (INA228_ReadEnergy(&INA228_Energy_Joule)) {
-    TxINAFrames[7].data[0] = (uint8_t)(INA228_Energy_Joule >> 24); // Store power in Tx buffer
-    TxINAFrames[7].data[1] = (uint8_t)(INA228_Energy_Joule >> 16);
-    TxINAFrames[7].data[2] = (uint8_t)(INA228_Energy_Joule >> 8);
-    TxINAFrames[7].data[3] = (uint8_t)(INA228_Energy_Joule& 0xFF);
+    TxINAFrames[7].data[0] = (uint8_t)(INA228_Energy_Joule >> 56); // Store Energy in Tx buffer
+    TxINAFrames[7].data[1] = (uint8_t)(INA228_Energy_Joule >> 48);
+    TxINAFrames[7].data[2] = (uint8_t)(INA228_Energy_Joule >> 40);
+    TxINAFrames[7].data[3] = (uint8_t)(INA228_Energy_Joule >> 32);
+    TxINAFrames[7].data[4] = (uint8_t)(INA228_Energy_Joule >> 24);
+    TxINAFrames[7].data[5] = (uint8_t)(INA228_Energy_Joule >> 16);
+    TxINAFrames[7].data[6] = (uint8_t)(INA228_Energy_Joule >> 8);
+    TxINAFrames[7].data[7] = (uint8_t)(INA228_Energy_Joule & 0xFF);
   } else {
     return false; // Error reading power
   }
 
+  if (INA228_ReadCharge(&INA228_Charge_Coulombs)) {
+    TxINAFrames[8].data[0] = (uint8_t)(INA228_Charge_Coulombs >> 56); // Store charge in Tx buffer
+    TxINAFrames[8].data[1] = (uint8_t)(INA228_Charge_Coulombs >> 48);
+    TxINAFrames[8].data[2] = (uint8_t)(INA228_Charge_Coulombs >> 40);
+    TxINAFrames[8].data[3] = (uint8_t)(INA228_Charge_Coulombs >> 32);
+    TxINAFrames[8].data[4] = (uint8_t)(INA228_Charge_Coulombs >> 24);
+    TxINAFrames[8].data[5] = (uint8_t)(INA228_Charge_Coulombs >> 16);
+    TxINAFrames[8].data[6] = (uint8_t)(INA228_Charge_Coulombs >> 8);
+    TxINAFrames[8].data[7] = (uint8_t)(INA228_Charge_Coulombs & 0xFF);
+  } else {
+    return false; // Error reading charge
+  }
 
   return true;
 }
@@ -196,35 +212,32 @@ int main(void) {
   systick_init();         // 1s second (STM32G0 runs at 16MHz)
   PA2_out_init();         // Test output PA2
   PB4_out_init();         // Test output PB4
-  INA228_Init();          // Initialize INA228 
-
+  INA228_Init();          // Initialize INA228
   Can_Init();         // Initialize CAN
 
   Init_FDCAN_INA228_Message(&TxFrames[0]); // Initialize FDCAN messages with ID's starting from 0x426U
   // Element [0] is highest priority --> used for current [mA], etc...
   // Element [7] is lowest priority --> used for DieID
 
-
   while (1) {
-
-    
+    // Main loop
     if (one_sec_tick >= 100) { // 1/2 second tick
         one_sec_tick = 0;
         INA228_Read_Values(&TxFrames[0]); // Read INA228 data and fill TxFrames
         msg_counter = 0;                  // Reset msg_counter to 0
           for (uint8_t i = 0; i < 8; i++) {
               if (FDCAN2_Send_Std_CAN_Message(&TxFrames[i])) {
-                msg_counter = i; // Set msg_counter to the current frame index
+                msg_counter = i;  // Set msg_counter to the current frame index
                 } else {
-                  i = 8; // Exit loop if sending fails
-                  msg_counter++; // Point to next message to be send by Interrupt Routine
+                  i = 8;          // Exit loop if FIFO full (sending fails)
+                  msg_counter++;  // Point to next message to be send by Interrupt Routine
                 }
           }
           // send the remaining messages fia Interrupt
           FDCAN2->IE |= BIT(9);   // Tx FIFO empty interrupt enable
-          FDCAN2->IR = 0;         // Clear all interrupt flags
+          FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
       
-          GPIOB->ODR ^= (1 << 4); // Toggle PB4
+          //GPIOB->ODR ^= (1 << 4); // Toggle PB4
     }
   }
 }
@@ -233,7 +246,6 @@ int main(void) {
 //------------------------------------------------------------
 // Interrupt Handlers
 //------------------------------------------------------------
-
 
 // SysTick interrupt handler
 void SysTick_IRQHandler(void){
@@ -248,7 +260,6 @@ void SysTick_IRQHandler(void){
   // This function is called when a message is received
   // Check if there is a message in FIFO0
 void TIM16_FDCAN_IT0_IRQHandler(void) {
-  
   uint32_t ir = FDCAN2->IR;
 
   // Received Interrupt routine
@@ -261,7 +272,7 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
       // Only process if there are actually messages in the FIFO
       if (fill_level > 0) {
         CAN_RxBufferElement *ptr = &FDCAN2_RxFIFO0[get_index];
-   
+        rx_temp = FDCAN2_RxFIFO0[get_index];
       // Read the message ID
       uint32_t temp2 = ptr->R0;
       uint32_t MsgID = (temp2 >> 18) & 0x7FF; // Read the message from FIFO0
@@ -283,22 +294,21 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
   if (ir & (1U << 9)) {           // Check if Tx FIFO is empty (TXFE)
     x++;                          // for testing to check how many TFEs were sent
     y = msg_counter; 
-    if (msg_counter >= 8) {       // Do nothing, all messages send
+    if (msg_counter >= 9) {       // Do nothing, all messages send
+      FDCAN2->IE &= ~BIT(9);      // Tx FIFO empty interrupt disable
       FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
     } 
     else {                        // Send the next message
-        for (y = y; y < 8; y++) {
-        if (FDCAN2_Send_Std_CAN_Message(&TxFrames[msg_counter])) {    // send the next message package until FIFO is full again
-        msg_counter++; // Increment msg_counter if message was sent successfully
-        }
+        for (y = y; y < 9; y++) {
+          if (FDCAN2_Send_Std_CAN_Message(&TxFrames[msg_counter])) {    // send the next message package until FIFO is full again
+            msg_counter++; // Increment msg_counter if message was sent successfully
+          }
         FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
-      }
+        }
     }
 
   }
 }
-  
-
 
   
 
