@@ -7,8 +7,9 @@
 // -----------------------------------------------------
 // Programming Language: C, pure bare metal (no CMSIS)
 //
-// This is a the program for the STM32G0B1 to collect 
-// data from the INA228 and send it over CAN bus.
+// This is a the program for the STM32G0B1 acting as a
+// Sensor Node (SN) to collect data from the INA228 and
+// send it via CAN bus to a Processing Unit (PU).
 // 
 // The program is using
 //    - an accurate base tick (10ms) (SYSTICK IRQ)
@@ -40,8 +41,7 @@ bool CAN_TxError = false; // Error flag for CAN communication
 
 uint8_t x=0;
 uint8_t y=0;
-uint32_t can_receive_FifO0 = 55;
-uint32_t temp;
+uint32_t one_sec_tick = 0;
 
 uint32_t INA228_Power_mW; 
 uint64_t INA228_Energy_Joule;
@@ -56,15 +56,14 @@ uint32_t previous_tec_value = 0; // Previous value of the transmit error counter
 
 volatile uint8_t rx_flag = 0;
 volatile uint8_t rx_received[8];
-volatile uint8_t HostStatus[8];
-volatile uint8_t HostCommand[8];
+volatile uint8_t SensorNodeStatus[8];       // Status of the Sensor Node
+volatile uint8_t ProcessingUnitStatus[8];   // Status of the processing unit
+volatile uint8_t ProcessingUnitCommand[8];  // Command from the processing unit to the sensor node
 CAN_RxBufferElement rx_temp;
-uint32_t one_sec_tick = 0;
+CAN_TxBufferElement TxFrames[10]; // Array to hold Tx frames
 
 #define FREQ 16000000  // PCLK, internal clock by default, 16 Mhz
 #define BIT(x) (1UL << (x))
-
-CAN_TxBufferElement TxFrames[9]; // Array to hold Tx frames
 
 
 //------------------------------------------------------------
@@ -78,12 +77,12 @@ static inline void init_clock(void) {
 }
 
 static inline void systick_init() {
-  uint32_t ticks = 16000; // 1ms tick at 16MHz, 16,000 Cycles
-  if ((ticks - 1) > 0xffffff) return;    // Systick timer is 24 bit
+  uint32_t ticks = 160000; // 10ms tick at 16MHz, 160,000 Cycles
+  if ((ticks - 1) > 0xffffff) return;     // Systick timer is 24 bit
   SYST->RVR = ticks - 1;
   SYST->CVR = 0;
-  SYST->CSR = BIT(0) | BIT(1) | BIT(2);  // Enable systick
-  RCC->APBENR2 |= BIT(0);               // Enable SYSCFG
+  SYST->CSR = BIT(0) | BIT(1) | BIT(2);   // Enable systick
+  RCC->APBENR2 |= BIT(0);                 // Enable SYSCFG
 }
 
 static inline void PA2_out_init() {
@@ -97,17 +96,17 @@ static inline void PB4_out_init() {
      // Enable GPIOB clock
     RCC->IOPENR |= (1U << 1);  // Set bit 1 for GPIOBEN
     // Configure PB4 as general purpose output mode
-    GPIOB->MODER &= ~(3U << (4 * 2));  // Clear mode bits for pin 4 (2 bits per pin)
-    GPIOB->MODER |= (1U << (4 * 2));   // Set as output (01) for pin 4
+    GPIOB->MODER &= ~(3U << (4 * 2));     // Clear mode bits for pin 4 (2 bits per pin)
+    GPIOB->MODER |= (1U << (4 * 2));      // Set as output (01) for pin 4
     // Configure PB4 as open drain
     GPIOB->OTYPER |= (1U << 4);  // Set open drain (1) for pin 4
     // Configure speed (optional, medium speed used here)
-    GPIOB->OSPEEDR &= ~(3U << (4 * 2));  // Clear speed bits for pin 4
-    GPIOB->OSPEEDR |= (1U << (4 * 2));   // Set as medium speed (01) for pin 4
+    GPIOB->OSPEEDR &= ~(3U << (4 * 2));   // Clear speed bits for pin 4
+    GPIOB->OSPEEDR |= (1U << (4 * 2));    // Set as medium speed (01) for pin 4
     // No pull-up needed since LED circuit provides the pull to VCC
-    GPIOB->PUPDR &= ~(3U << (4 * 2));    // Clear PUPD bits (00 = no pull-up/down)
-    GPIOB->ODR &= ~(1U << 4);           // Clear PB4
-    GPIOB->ODR |= (1U << 4);            // Set PB4
+    GPIOB->PUPDR &= ~(3U << (4 * 2));     // Clear PUPD bits (00 = no pull-up/down)
+    GPIOB->ODR &= ~(1U << 4);             // Clear PB4
+    GPIOB->ODR |= (1U << 4);              // Set PB4
 }
 
 // -----------------------------------------------------------
@@ -213,7 +212,8 @@ int main(void) {
   PA2_out_init();         // Test output PA2
   PB4_out_init();         // Test output PB4
   INA228_Init();          // Initialize INA228
-  Can_Init();         // Initialize CAN
+  Can_Init();             
+  // Initialize CAN
 
   Init_FDCAN_INA228_Message(&TxFrames[0]); // Initialize FDCAN messages with ID's starting from 0x426U
   // Element [0] is highest priority --> used for current [mA], etc...
@@ -221,7 +221,7 @@ int main(void) {
 
   while (1) {
     // Main loop
-    if (one_sec_tick >= 100) { // 1/2 second tick
+    if (one_sec_tick >= 100) { // 1 second tick --> to be changed to 100ms
         one_sec_tick = 0;
         INA228_Read_Values(&TxFrames[0]); // Read INA228 data and fill TxFrames
         msg_counter = 0;                  // Reset msg_counter to 0
@@ -229,7 +229,7 @@ int main(void) {
               if (FDCAN2_Send_Std_CAN_Message(&TxFrames[i])) {
                 msg_counter = i;  // Set msg_counter to the current frame index
                 } else {
-                  i = 8;          // Exit loop if FIFO full (sending fails)
+                  i = 8;          // Exit loop if FIFO full (sending failed)
                   msg_counter++;  // Point to next message to be send by Interrupt Routine
                 }
           }
@@ -252,10 +252,9 @@ int main(void) {
 //------------------------------------------------------------
 
 // SysTick interrupt handler
-void SysTick_IRQHandler(void){
-  // SysTick interrupt handler
-  // This function is called every 1ms
-  GPIOA->ODR ^= (1 << 2);   // Toggle PA2
+// This function is called every 10ms
+void SysTick_IRQHandler(void) {
+  GPIOA->ODR ^= (1 << 2);   // Toggle PA2 for testing purposes
   one_sec_tick++;           // Increment the tick counter
 }
 
@@ -283,9 +282,9 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
 
       // Process based on message ID
       if (MsgID == 0x127) {
-        memcpy((void*)HostStatus, ptr->data, 8);  // Read the message from FIFO0
+        memcpy((void*)ProcessingUnitStatus, ptr->data, 8);  // Read the message from FIFO0
       } else if (MsgID == 0x128) {
-        memcpy((void*)HostCommand, ptr->data, 8); // Read the message from FIFO0
+        memcpy((void*)ProcessingUnitCommand, ptr->data, 8); // Read the message from FIFO0
       }
    
       rx_flag = 1; // Set the flag to indicate that a message has been received
@@ -298,30 +297,33 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
   if (ir & (1U << 9)) {               // Check if Tx FIFO is empty (TXFE)
     x++;                              // for testing to check how many TFEs were sent
     y = msg_counter; 
-    if (msg_counter >= 9) {           // Do nothing, all messages send
+    if (msg_counter >= 9) {           // All messages send!
       FDCAN2->IE &= ~BIT(9);          // Tx FIFO empty interrupt disable
       FDCAN2->IR = (1U << 9);         // Clear the TFE interrupt flag
-      
-      // Check for transmit errors once all messages are sent
-      uint32_t psr = FDCAN2->PSR;     // Read the PSR for transmit errors
-      uint32_t ecr = FDCAN2->ECR;     // Read the ECR for transmit errors
-      uint32_t lec = psr & 0x7U;      // Last error code
-      uint32_t dlec = ((psr & 0x700U) >> 8);   // Data last error code
+      // If all messages are sent, check for transmit errors
+      // and update the SensorNodeStatus with error codes if any
+      uint32_t psr = FDCAN2->PSR;             // Read the PSR for transmit errors
+      uint32_t ecr = FDCAN2->ECR;             // Read the ECR for transmit errors
+      uint32_t lec = psr & 0x7U;              // Last error code
+      uint32_t dlec = ((psr & 0x700U) >> 8);  // Data last error code
       uint32_t tec = ecr &0xFFU;  // Read the transmit error counter
       // Check for transmit error and error counter going up
       if ((lec != 0) || (dlec != 0b111) || tec > previous_tec_value) {  
           CAN_TxError = true;           // Set error flag if there are transmit errors
-          // write the error code to the HostStatus
-          HostStatus[0] = (uint8_t)lec;          // Last error code
-          HostStatus[1] = (uint8_t)dlec;         // Data last error code
-          HostStatus[2] = (uint8_t)(tec >> 24); // Transmit error counter
-          HostStatus[3] = (uint8_t)(tec >> 16);
-          HostStatus[4] = (uint8_t)(tec >> 8);
-          HostStatus[5] = (uint8_t)(tec & 0xFF);
-          HostStatus[6] = 0;            // Reserved for future use
-          HostStatus[7] = 0;            // Reserved for future use
+          // write the error code to the SensorNodeStatus
+          SensorNodeStatus[0] = (uint8_t)lec;          // Last error code
+          SensorNodeStatus[1] = (uint8_t)dlec;         // Data last error code
+          SensorNodeStatus[2] = (uint8_t)(tec >> 24); // Transmit error counter
+          SensorNodeStatus[3] = (uint8_t)(tec >> 16);
+          SensorNodeStatus[4] = (uint8_t)(tec >> 8);
+          SensorNodeStatus[5] = (uint8_t)(tec & 0xFF);
+          SensorNodeStatus[6] = 0x1U;             // Indicate, error currently existing
+          SensorNodeStatus[7] = 0;                // Reserved for future use
           // FDCAN2_Send_Std_CAN_Message(&TxFrames[0]); // Send HostStatus message with error codes
-        } else CAN_TxError = false;     // Clear error flag if no transmit errors
+        } else {
+            CAN_TxError = false;                  // Clear error flag if no transmit errors
+            SensorNodeStatus[6] = 0x0U;           // Indicate, no error currently existing
+        }
       previous_tec_value = tec;         // Update the previous transmit error counter value
 
     } 
