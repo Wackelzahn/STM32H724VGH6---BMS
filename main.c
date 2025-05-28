@@ -297,7 +297,7 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
   if (ir & (1U << 9)) {               // Check if Tx FIFO is empty (TXFE)
     x++;                              // for testing to check how many TFEs were sent
     y = msg_counter; 
-    if (msg_counter >= 9) {           // All messages send!
+    if (msg_counter >= 10) {           // All messages send!
       FDCAN2->IE &= ~BIT(9);          // Tx FIFO empty interrupt disable
       FDCAN2->IR = (1U << 9);         // Clear the TFE interrupt flag
       // If all messages are sent, check for transmit errors
@@ -311,24 +311,24 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
       if ((lec != 0) || (dlec != 0b111) || tec > previous_tec_value) {  
           CAN_TxError = true;           // Set error flag if there are transmit errors
           // write the error code to the SensorNodeStatus
-          SensorNodeStatus[0] = (uint8_t)lec;          // Last error code
-          SensorNodeStatus[1] = (uint8_t)dlec;         // Data last error code
-          SensorNodeStatus[2] = (uint8_t)(tec >> 24); // Transmit error counter
-          SensorNodeStatus[3] = (uint8_t)(tec >> 16);
-          SensorNodeStatus[4] = (uint8_t)(tec >> 8);
-          SensorNodeStatus[5] = (uint8_t)(tec & 0xFF);
-          SensorNodeStatus[6] = 0x1U;             // Indicate, error currently existing
-          SensorNodeStatus[7] = 0;                // Reserved for future use
+          TxFrames[9].data[0] = (uint8_t)lec;          // Last error code
+          TxFrames[9].data[1] = (uint8_t)dlec;         // Data last error code
+          TxFrames[9].data[2] = (uint8_t)(tec >> 24); // Transmit error counter
+          TxFrames[9].data[3] = (uint8_t)(tec >> 16);
+          TxFrames[9].data[4] = (uint8_t)(tec >> 8);
+          TxFrames[9].data[5] = (uint8_t)(tec & 0xFF);
+          TxFrames[9].data[6] = 0x1U;             // Indicate, error currently existing
+          TxFrames[9].data[7] = 0;                // Reserved for future use
           // FDCAN2_Send_Std_CAN_Message(&TxFrames[0]); // Send HostStatus message with error codes
         } else {
             CAN_TxError = false;                  // Clear error flag if no transmit errors
-            SensorNodeStatus[6] = 0x0U;           // Indicate, no error currently existing
+            TxFrames[9].data[6] = 0x0U;           // Indicate, no error currently existing
         }
       previous_tec_value = tec;         // Update the previous transmit error counter value
 
     } 
     else {                        // Send the next message
-        for (y = y; y < 9; y++) {
+        for (y = y; y < 10; y++) {
           if (FDCAN2_Send_Std_CAN_Message(&TxFrames[msg_counter])) {    // send the next message package until FIFO is full again
             msg_counter++;        // Increment msg_counter if message was sent successfully
           }

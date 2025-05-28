@@ -154,7 +154,7 @@ bool Can_Init(void) {
 //  Returns:     true if successful, false if initialization fails  
 //  ------------------------------------
 bool Init_FDCAN_INA228_Message(CAN_TxBufferElement *Frame) {
-    for (uint8_t i = 0; i < 9; i++) {
+    for (uint8_t i = 0; i < 10; i++) {
         Frame[i].T0 = ((0x426U + i) << 18) | (0U << 29) | (0U << 30) | (0U << 31); // ID = 0x426, Data frame
         Frame[i].T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23); // 8 byte, classic CAN
             for (int j = 0; j < 8; j++) {
