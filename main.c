@@ -36,7 +36,7 @@
 // Global variables
 //------------------------------------------------------------
 
-
+bool CAN_TxError = false; // Error flag for CAN communication
 
 uint8_t x=0;
 uint8_t y=0;
@@ -52,7 +52,7 @@ int64_t INA228_Charge_Coulombs;
 
 uint8_t msg_counter = 0;
 
-uint8_t zonk = 0;  
+uint32_t previous_tec_value = 0; // Previous value of the transmit error counter 
 
 volatile uint8_t rx_flag = 0;
 volatile uint8_t rx_received[8];
@@ -233,11 +233,15 @@ int main(void) {
                   msg_counter++;  // Point to next message to be send by Interrupt Routine
                 }
           }
-          // send the remaining messages fia Interrupt
+          // send the remaining messages via Interrupt
           FDCAN2->IE |= BIT(9);   // Tx FIFO empty interrupt enable
-          FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
-      
-          //GPIOB->ODR ^= (1 << 4); // Toggle PB4
+          FDCAN2->IR = (1U << 9);           // Clear the TFE interrupt flag
+          // Check for transmit errors
+          if (CAN_TxError == 1) {
+            GPIOB->ODR ^= (1U << 4);        // Toggle PB4
+          } else  {
+                GPIOB->ODR |= (1U << 4);    // SET open drain off PB4 --> LED off
+                  }
     }
   }
 }
@@ -251,14 +255,14 @@ int main(void) {
 void SysTick_IRQHandler(void){
   // SysTick interrupt handler
   // This function is called every 1ms
-  GPIOA->ODR ^= (1 << 2);  // Toggle PA2
-  one_sec_tick++;         // Increment the tick counter
+  GPIOA->ODR ^= (1 << 2);   // Toggle PA2
+  one_sec_tick++;           // Increment the tick counter
 }
 
 
 // FDCAN interrupt handler
-  // This function is called when a message is received
-  // Check if there is a message in FIFO0
+// This function is called when a message is received
+// Check if there is a message in FIFO0
 void TIM16_FDCAN_IT0_IRQHandler(void) {
   uint32_t ir = FDCAN2->IR;
 
@@ -291,19 +295,42 @@ void TIM16_FDCAN_IT0_IRQHandler(void) {
   }
 
   // Transmit interrupt routine
-  if (ir & (1U << 9)) {           // Check if Tx FIFO is empty (TXFE)
-    x++;                          // for testing to check how many TFEs were sent
+  if (ir & (1U << 9)) {               // Check if Tx FIFO is empty (TXFE)
+    x++;                              // for testing to check how many TFEs were sent
     y = msg_counter; 
-    if (msg_counter >= 9) {       // Do nothing, all messages send
-      FDCAN2->IE &= ~BIT(9);      // Tx FIFO empty interrupt disable
-      FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
+    if (msg_counter >= 9) {           // Do nothing, all messages send
+      FDCAN2->IE &= ~BIT(9);          // Tx FIFO empty interrupt disable
+      FDCAN2->IR = (1U << 9);         // Clear the TFE interrupt flag
+      
+      // Check for transmit errors once all messages are sent
+      uint32_t psr = FDCAN2->PSR;     // Read the PSR for transmit errors
+      uint32_t ecr = FDCAN2->ECR;     // Read the ECR for transmit errors
+      uint32_t lec = psr & 0x7U;      // Last error code
+      uint32_t dlec = ((psr & 0x700U) >> 8);   // Data last error code
+      uint32_t tec = ecr &0xFFU;  // Read the transmit error counter
+      // Check for transmit error and error counter going up
+      if ((lec != 0) || (dlec != 0b111) || tec > previous_tec_value) {  
+          CAN_TxError = true;           // Set error flag if there are transmit errors
+          // write the error code to the HostStatus
+          HostStatus[0] = (uint8_t)lec;          // Last error code
+          HostStatus[1] = (uint8_t)dlec;         // Data last error code
+          HostStatus[2] = (uint8_t)(tec >> 24); // Transmit error counter
+          HostStatus[3] = (uint8_t)(tec >> 16);
+          HostStatus[4] = (uint8_t)(tec >> 8);
+          HostStatus[5] = (uint8_t)(tec & 0xFF);
+          HostStatus[6] = 0;            // Reserved for future use
+          HostStatus[7] = 0;            // Reserved for future use
+          // FDCAN2_Send_Std_CAN_Message(&TxFrames[0]); // Send HostStatus message with error codes
+        } else CAN_TxError = false;     // Clear error flag if no transmit errors
+      previous_tec_value = tec;         // Update the previous transmit error counter value
+
     } 
     else {                        // Send the next message
         for (y = y; y < 9; y++) {
           if (FDCAN2_Send_Std_CAN_Message(&TxFrames[msg_counter])) {    // send the next message package until FIFO is full again
-            msg_counter++; // Increment msg_counter if message was sent successfully
+            msg_counter++;        // Increment msg_counter if message was sent successfully
           }
-        FDCAN2->IR = (1U << 9);     // Clear the TFE interrupt flag
+        FDCAN2->IR = (1U << 9);   // Clear the TFE interrupt flag
         }
     }
 
