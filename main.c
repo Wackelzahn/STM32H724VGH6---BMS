@@ -35,11 +35,6 @@
 // Global variables
 //------------------------------------------------------------
 
-bool CAN_TxError = false; // Error flag for CAN communication
-
-uint8_t x=0;
-uint8_t y=0;
-uint32_t one_sec_tick = 0;
 
 uint32_t INA228_Power_mW; 
 uint64_t INA228_Energy_Joule;
@@ -52,11 +47,19 @@ uint8_t msg_counter = 0;
 
 uint32_t previous_tec_value = 0; // Previous value of the transmit error counter 
 
+// use volatile variables to ensure they are not optimized out by the compiler
+// and to ensure they are always read from memory. Use for variables that are used
+// in interrupt handlers or memory mapped registers. Or are modified by threads  / tasks.
+volatile uint32_t one_sec_tick = 0;
 volatile uint8_t rx_flag = 0;
 volatile uint8_t rx_received[8];
 volatile uint8_t SensorNodeStatus[8];       // Status of the Sensor Node
 volatile uint8_t ProcessingUnitStatus[8];   // Status of the processing unit
 volatile uint8_t ProcessingUnitCommand[8];  // Command from the processing unit to the sensor node
+volatile bool CAN_TxError = false;          // Error flag for CAN communication
+volatile uint8_t x=0;                       // Counter for testing how many interrupts were fired    
+volatile uint8_t y=0;
+
 CAN_RxBufferElement rx_temp;
 CAN_TxBufferElement TxFrames[10]; // Array to hold Tx frames
 
@@ -217,6 +220,18 @@ int main(void) {
 
   while (1) {
     // Main loop
+
+    if (rx_flag == 1) {
+      rx_flag = 0;                        // Reset the flag after processing
+      // Check ProcessingUnitCommand 
+      if (ProcessingUnitCommand[0] == 0x01U) {
+        // Reset TxErrorCode (Frame[9]) if command is received 
+        for (uint8_t i = 0; i < 8; i++) {
+          TxFrames[9].data[i] = 0x00U;    // Clear the TxErrorCode frame
+        }
+      }
+    }
+
     if (one_sec_tick >= 100) { // 1 second tick --> to be changed to 100ms
         one_sec_tick = 0;
         INA228_Read_Values(&TxFrames[0]); // Read INA228 data and fill TxFrames

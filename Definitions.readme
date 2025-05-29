@@ -4,17 +4,18 @@
 
 CAN Bus Frame Definitions
 
- CAN ID | Tx/Rx | Name                  | CAN Byte  | Description                       | Data Type | Unit
+ CAN ID | Tx/Rx | Name                  | CAN Byte  | Description                       | D-Type | Unit
 ====================================================================================================================
- 0x0127 |  Rx   | ProcessingUnitStatus  | 0 - 7 (8) |                                   | uint8     |
+ 0x0127 |  Rx   | ProcessingUnitStatus  | 0 - 7 (8) |                                   | uint8  |
 -------------------------------------------------------------------------------------------------------------------
- 0x0128 |  Rx   | ProcessingUnitCommand | 0 - 7 (8) |                                   | uint8     |
+ 0x0128 |  Rx   | ProcessingUnitCommand |    0      | Bit 0 = Reset Last Tx Error       | uint8  |
+ 0x0128 |  Rx   |                       | 1 - 7     |                                   |        |
 -------------------------------------------------------------------------------------------------------------------
- 0x0426 |  Tx   | TxFrames[0]           | 0 - 3 (8) | Current Result                    | int32     | mA
+ 0x0426 |  Tx   | TxFrames[0]           | 0 - 3 (8) | Current Result                    | int32  | mA
 -------------------------------------------------------------------------------------------------------------------
- 0x0427 |  Tx   | TxFrames[1]           | 0 - 1 (8) | Bus Voltage Measurement           | uint16    | mV
+ 0x0427 |  Tx   | TxFrames[1]           | 0 - 1 (8) | Bus Voltage Measurement           | uint16 | mV
 -------------------------------------------------------------------------------------------------------------------
- 0x0428 |  Tx   | TxFrames[2]           | 0 - 1 (8) | Temperature Measurement           | int16     | 1/100 of degC
+ 0x0428 |  Tx   | TxFrames[2]           | 0 - 1 (8) | Temperature Measurement           | int16  | 1/100 of degC
 -------------------------------------------------------------------------------------------------------------------
  0x0429 |  Tx   | TxFrames[3]           |
 -------------------------------------------------------------------------------------------------------------------
@@ -28,9 +29,9 @@ CAN Bus Frame Definitions
 -------------------------------------------------------------------------------------------------------------------
  0x042E |  Tx   | TxFrames[8]           |           
 -------------------------------------------------------------------------------------------------------------------
- 0x042F |  Tx   | TxFrames[9]           |     0     | Tx "Last Error code" LEC          | uint8     | N/A
- 0x042F |  Tx   | TxFrames[9]           |     1     | Tx "Data Last Error Code" DLEC    | uint8     | N/A
- 0x042F |  Tx   | TxFrames[9]           |     2     | Tx Transmit error counter [0]     | uint8     | N/A                        | uint_8    | N/A
- 0x042F |  Tx   | TxFrames[9]           |     3     | Tx Transmit error counter [1]     | uint8     | N/A
- 0x042F |  Tx   | TxFrames[9]           |     4     | Tx Transmit error counter [2]     | uint8     | N/A
- 0x042F |  Tx   | TxFrames[9]           |     5     | Tx Transmit error counter [3]     | uint8     | N/A
+ 0x042F |  Tx   | TxFrames[9]           |     0     | Tx "Last Error code" LEC          | uint8  | N/A
+ 0x042F |  Tx   | TxFrames[9]           |     1     | Tx "Data Last Error Code" DLEC    | uint8  | N/A
+ 0x042F |  Tx   | TxFrames[9]           |     2     | Tx Transmit error counter [0]     | uint8  | N/A         
+ 0x042F |  Tx   | TxFrames[9]           |     3     | Tx Transmit error counter [1]     | uint8  | N/A
+ 0x042F |  Tx   | TxFrames[9]           |     4     | Tx Transmit error counter [2]     | uint8  | N/A
+ 0x042F |  Tx   | TxFrames[9]           |     5     | Tx Transmit error counter [3]     | uint8  | N/A
