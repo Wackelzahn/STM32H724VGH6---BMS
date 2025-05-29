@@ -96,6 +96,7 @@ bool INA228_SetShuntTempco(uint16_t tempco) {
 // Read VBUS voltage
 // VBUS = (VSHUNT * 0.00125) * 1310920 / 2^26
 // 195.3125 μV/LSB
+// Returns the VBUS in mV
 bool INA228_ReadVBUS(uint16_t *vbus) {
     uint8_t vbus_data[3];
     uint64_t product = 0;
