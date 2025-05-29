@@ -221,6 +221,7 @@ int main(void) {
   while (1) {
     // Main loop
 
+    // Check messages from Processing Unit
     if (rx_flag == 1) {
       rx_flag = 0;                        // Reset the flag after processing
       // Check ProcessingUnitCommand 
@@ -231,6 +232,7 @@ int main(void) {
         }
       }
     }
+
 
     if (one_sec_tick >= 100) { // 1 second tick --> to be changed to 100ms
         one_sec_tick = 0;
