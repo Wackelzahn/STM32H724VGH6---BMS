@@ -229,12 +229,18 @@ int main(void) {
         // Reset TxErrorCode (Frame[9]) if command is received 
         for (uint8_t i = 0; i < 8; i++) {
           TxFrames[9].data[i] = 0x00U;    // Clear the TxErrorCode frame
-        }
+        } 
       }
-    }
+      if (ProcessingUnitCommand[0] == 0x02U) {
+        // Reset the contents of the INA228 accumulation registers Energy and Charge
+          INA228_WriteRegister(0x00, 0b0100000000000000);
+          }
+        }
+      
+    
 
 
-    if (one_sec_tick >= 100) { // 1 second tick --> to be changed to 100ms
+    if (one_sec_tick >= 20) { // 0.2s second tick --> to be changed to 100ms
         one_sec_tick = 0;
         INA228_Read_Values(&TxFrames[0]); // Read INA228 data and fill TxFrames
         msg_counter = 0;                  // Reset msg_counter to 0
