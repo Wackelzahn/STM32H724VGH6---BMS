@@ -1,18 +1,18 @@
 
-// Created: 2025-03-19 07:00:00
+// Created: 2025-08-19 07:00:00
 // Author: M. Schneider
 // -----------------------------------------------------
-// Target Device: STM32G0B1KEU6
+// Target Device: STM32H742VGH6
 // -----------------------------------------------------
 // Programming Language: C, pure bare metal (no CMSIS)
 //
 // This is the implementation file CAN bus interfacing 
 // for the STM32G0B1 microcontroller.
 // This source code is intended to create 
-//    - the initialization of the FDAN2 interface
-//      1. Initialization of the GPIO
-//      2. Setting up the Filter
-//      3. FUNCTIONS FOR sending (receive is handled in ISR)
+//      1. Initialization of the FDAN1 & FDCAN2 interface
+//      2. Initialization of the GPIO
+//      3. Setting up the Filter
+//      4. FUNCTIONS FOR sending (receive is handled in ISR)
 // -----------------------------------------------------
 
 
@@ -20,185 +20,184 @@
 #include "registers.h"
 
 #define BIT(x) (1UL << (x)) // Bit banging
-int32_t counter_loop = 0;   // counter for waiting loops
+uint32_t counter_loop = 0;   // counter for waiting loops
 
 
-//  function for initializing the FDCAN2 Interface for STM32G0B1
-//   CAN_RX on PB0, CAN_TX on PB1, Clock speed: 16MHz
+//   Functions for initializing the FDCAN1 & FDCAN2 Interface for STM32H742VGH6
+//   FDCAN1_RX on PB5, FDCAN1_TX on PB6
+//   FDCAN2_RX on PD0, FDCAN2_TX on PD1
 //   Target bitrate: 500 Kbps
 //  ------------------------------------
 //  Parameters:  none
 //  Returns:     1=success, 0=fail 
 //  ------------------------------------
 
-bool Can_Init(void) {
-    // 1. enable Clocks
-    RCC->IOPENR |= BIT(1);           // Enable clock for GPIOB
 
-    // Configure PB0 (RX) and PB1 (TX) for FDCAN2
-    // Clear mode bits first then set to alternate function (0b10)
-    GPIOB->MODER &= ~(BIT(0) | BIT(1) | BIT(2) | BIT(3)); // Clear mode bits for PB0 and PB1
-    GPIOB->MODER |= (BIT(1) | BIT(3));                    // Set alternate function mode for PB0 and PB1
 
-    // Set pins to AF3 for FDCAN2 (PB0/PB1 on AF3 according to STM32G0B1 datasheet)
-    GPIOB->AFR[0] &= ~(0xFU << (0*4) | 0xFU << (1*4));  // Clear AF for PB0 & PB1
-    GPIOB->AFR[0] |= (0x3U << (0*4) | 0x3U << (1*4));   // Set AF3 for FDCAN2
+bool FDCAN1_init(void){
+    
+    // Enable FDCAN peripheral clock in APB1H
+    RCC->APB1HENR |= (1 << 8);       // FDCAN clock enable (bit 8 in APB1HENR)
+    RCC->D2CCIP1R &= ~(0x3U << 28);    // Clear bits -> (00) = clock source HSE (16MHz)
+    
+    // Enable GPIOB clock
+    RCC->AHB4ENR |= (1 << 3); // Enable GPIOD clock
 
-    // Enable FDCAN clock
-    RCC->APBENR1 |= BIT(12);         // Enable the clock for FDCAN2 (bit 12 in APBENR1)
+    // Configure FDCAN1 RX (PD0) and TX (PD1)
+    GPIOD->MODER &= ~((3UL << 0)|(3UL << 2));         // Clear mode bits for PD0 & PD1
+    GPIOD->MODER |= ((2UL << 0)|(2UL << 2));          // Set to alternate function mode
+    GPIOD->AFR[0] &= ~((0xFUL << 0) | (0xFUL << 4));  // clear AF bits for PB5 & PB6
+    GPIOD->AFR[0] |= (0x9U << 0) | (0x9U << 4);       // Set AF9 for FDCAN1
 
-    // Initialize FDCAN
-    FDCAN2->CCCR |= BIT(0);             // Enter configuration mode (INIT bit)
-    FDCAN2->CCCR |= BIT(1);             // Set CCE bit to allow configuration changes
-
-    counter_loop = 0;
-    while (!(FDCAN2->CCCR & BIT(0)))    // Check if INIT bit is set (in config mode)
-    {                                   
+    // Enter initialization Mode
+    FDCAN1->CCCR |= BIT(0); // Set INIT bit to enter initialization mode
+    counter_loop = 0; // Reset counter for waiting loops
+    while (!(FDCAN1->CCCR & BIT(0)))
+    {
         if (counter_loop > 1000) {
-            return false;
+            return false; // Initialization failed      
         }
         counter_loop++;
     }
 
-    // Configure for classic CAN operation, Normal mode, no FD operation,
-    // no bit rate switching, no auto-retransmission, enable transmit pause
-    // no protocol exception handling, can according ISO 11898-1
-    FDCAN2->CCCR &= ~BIT(5);            // Disable bus monitoring
-    FDCAN2->CCCR |= BIT(6);             // Automatic retransmission disabled
-    FDCAN2->CCCR &= ~BIT(7);            // Normal operation mode    
-    FDCAN2->CCCR &= ~BIT(8);            // FD Operation disabled
-    FDCAN2->CCCR &= ~BIT(9);            // Bit Rate Switch disabled
-    FDCAN2->CCCR &= ~BIT(12);            // Protocol Exception Handling disabled
-    FDCAN2->CCCR |= BIT(14);            // Transmit Pause enabled
-    FDCAN2->CCCR &= ~BIT(15);           // ISO 11898-1 mode disabled
+    FDCAN1->CCCR |= BIT(1);     // Set CCE bit to enable configuration changes
+    
+    FDCAN1->CCCR &= ~BIT(8);    // FD Operation disabled, normal CAN mode
+    FDCAN1->CCCR &= ~BIT(9);    // no bitrate switching
+    FDCAN1->CCCR &= ~BIT(5);    // disable oring
+    FDCAN1->CCCR |= BIT(6);     // disable automatic re-transmission
+    FDCAN1->CCCR &= ~BIT(7);    // disable test mode
+    FDCAN1->CCCR |= BIT(12);    // disable protocol exception handling
+    FDCAN1->CCCR &= ~BIT(15);   // disable ISO 11898-1:2015 mode
+    FDCAN1->CCCR |= BIT(14);    // enable transmit pause
+    FDCAN1->CCCR &= ~BIT(2);    // normal can operation
 
 
-    // Configure nominal bit timing for 500 Kbps with 16 MHz clock
-    // Calculation:
-    // Target bit rate = 500 Kbps
-    // Prescaler = 2 -> 8 M2
-    // NTS1 = 10 (11 tq), NTS2 = 3 (4 tq), SJW = 1 (2 tq)
-    // Total bit time = 1 + 11 + 4 = 16 tq
-    // Bit rate = 8 MHz / 16 = 500 Kbps
-    FDCAN2->NBTP =  (3 << 25) |         // NTSEG2 (value - 1)
-                    (1 << 16) |         // NTSEG1 (value - 1)
-                    (10 << 8) |         // NBRP (value - 1)
-                    (3 << 0);           // NSJW (value - 1)
 
-    // Configure data bit rate (same as nominal for simplicity)
-    // NSJW = 3 (register value) → DSJW = 3
-    // NTSEG2 = 3 (register value) → DTSEG2 = 3
-    // NTSEG1 = 10 (register value) → DTSEG1 = 10
-    // NBRP = 1 (register value) → DBRP = 1
-    FDCAN2->DBTP = (1U << 16) |          // DBRP register
-                   (3U << 8) |           // DTSEG1 register
-                   (10U << 4) |          // DTSEG2 register
-                   (3U << 0);            // DSJW register
-               
+    // Set the bit timing parameters (500kbps)
+    // Prescaler (NBRP) = 25, Time segment 1 (NTSEG1) = 13, Time segment 2 (NTSEG2) = 2, SJW = 2
+    // Bit rate = Fdcan_clk / (Prescaler * (1 + TSEG1 + TSEG2))
+    // Assuming Fdcan_clk = 16 MHz HSE, Bit rate = 16MHz / (25 * (1 + 13 + 2)) = 500 kbps
+    FDCAN1->NBTP =  (1UL << 0) |        // NTSEG2 = 1 (2 - 1)
+                    (12UL << 8) |       // NTSEG1 = 12 (13 - 1)
+                    (1UL << 16) |       // NBRP = 1 (2 - 1)
+                    (1UL << 25);        // NSJW = 1 (2 - 1)
 
-    // Standart filter configuration (1 Filter, accept only 0x127 ID to Rx FIFO 0)
-    // SFID2 = 0x0127; // only ID1 accepted
-    // SFID1 = 0x0127; // Filter ID 1
-    // SFEC = 0b001; // If match, store in Rx FIFO0
-    // SFT = 0b10; // Standard ID filter type (Filter and Mask)
+  
+    // Clear FDCAN1 message RAM
+    uint32_t *fdcan1_ram = (uint32_t *)FDCAN_MESSAGE_RAM_BASE;
+    for (int i = 0; i < 634; i++) { // 2536 bytes = 634 words
+    fdcan1_ram[i] = 0;
+    } 
 
-    for (int i=0; i<212; i++) { // Clear FDCAN2 message RAM
-        FDCAN2_StandartMessageIDFilter[i] = 0x00000000U;  // equal to FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset
-    }
+    // Set filter to accept messages
+    // Filter Element 0: ID 0x426 -> RX FIFO 0
+    FDCAN1_StandartMessageIDFilter[0] = (0x1U << 30) |      // SFT = 01 (Dual ID filter)
+                                        (0x1U << 27) |      // SFEC = 001 (Store in RX FIFO 0)
+                                        (0x426U << 16) |    // SFID1 = 0x42E (bits 26:16)
+                                        (0x426U << 0);      // SFID2 = 0x42E (bits 10:0)
+    // Filter Element 1: ID 0x427 -> RX FIFO 0  
+    FDCAN1_StandartMessageIDFilter[1] = (0x1U << 30) |      // SFT = 01 (Dual ID filter)
+                                        (0x1U << 27) |      // SFEC = 001 (Store in RX FIFO 0)
+                                        (0x427U << 16) |    // SFID1 = 0x128 (bits 26:16)
+                                        (0x427U << 0);      // SFID2 = 0x128 (bits 10:0)                                
+     
+   // Filter Element 1: ID 0x428 - 0x42E -> RX FIFO 0  
+    FDCAN1_StandartMessageIDFilter[2] = (0x1U << 30) | (0x1U << 27) | (0x428U << 16) | (0x428U << 0);        
+    FDCAN1_StandartMessageIDFilter[3] = (0x1U << 30) | (0x1U << 27) | (0x429U << 16) | (0x429U << 0);     
+    FDCAN1_StandartMessageIDFilter[4] = (0x1U << 30) | (0x1U << 27) | (0x42AU << 16) | (0x42AU << 0);     
+    FDCAN1_StandartMessageIDFilter[5] = (0x1U << 30) | (0x1U << 27) | (0x42BU << 16) | (0x42BU << 0);     
+    FDCAN1_StandartMessageIDFilter[6] = (0x1U << 30) | (0x1U << 27) | (0x42CU << 16) | (0x42CU << 0);   
+    FDCAN1_StandartMessageIDFilter[7] = (0x1U << 30) | (0x1U << 27) | (0x42DU << 16) | (0x42DU << 0);
+    FDCAN1_StandartMessageIDFilter[8] = (0x1U << 30) | (0x1U << 27) | (0x42EU << 16) | (0x42EU << 0);    
 
-    // Set filter 0(1) to accept ID 0x127(0x0128)
-    FDCAN2_StandartMessageIDFilter[0] = (0x127U << 0) |(0x127U << 16) |(0b001U << 27) |(0b10U << 30); 
-    FDCAN2_StandartMessageIDFilter[1] = (0x128U << 0) |(0x128U << 16) |(0b001U << 27) |(0b10U << 30); 
+    // Configure Global filter settings    
+    // Reject remote frames, reject extended frames, reject non-matching frames                                
+    FDCAN1->GFC = (0x1U << 0) |     // RRFE = 1 (Reject remote frames extended)
+                  (0x1U << 1) |     // RRFS = 1 (Reject remote frames standart)
+                  (0x3U << 2) |     // ANFE = 11 (Reject non-matching frames extended)
+                  (0x3U <<4);       // ANFS = 00 (Reject non-matching frames standard)
 
-    // Configure global filter settings
-    // Set RRFE = 1 (reject extended frames), Set ANFE = 0b11 Reject non-matching frames
-    // Set ANFE = 0b11 (reject non-matching frames), Set LSS = 0b00001 (1 standart filter)
-    FDCAN2->RXGFC = (1U << 0) |     // Reject all "remote" frames with 29bit ID (RRFE = 1)
-                    (1U << 1) |     // Reject all "remote" frames with 11bit ID (RRFE = 1)
-                    (0b11 << 2) |   // Reject non-matching frames (ANFE = 0b11) 11bit ID
-                    (0b11 << 4) |   // Reject non matching 11 bit ID's
-                    (2U << 16);     // Set LSS = 0b00010 (two standard filter)
-                    
-    // Configure Interrupt for RX FIFO 0 receive new message
-    FDCAN2->ILS &= BIT(0);          // Assign RF0N to IT0 (clear bit 0) 
-    FDCAN2->IE |= BIT(0);           // Rx FIFO 0 new message interrupt enable
-    FDCAN2->ILE |= BIT(0);          // Enable IT0 line to NVIC (to enable IT1 set to 1))
+    // Configure FDCAN1 message RAM
+    // Configure the Element Size of the RX FIFO to 4 words (8 byte data)
+    FDCAN1->RXESC &= ~(0x7U << 0);                          // F0DS = 0 (8 byte data) FIFO 1 -> maybe typo in the reference manual
+    FDCAN1->RXESC &= ~(0x7U << 4);                          // F1DS = 0 (8 byte data) FIFO 0
+    //Configure the Element Size of the TX Buffer to 4 words (8 byte data)
+    FDCAN1->TXESC &= ~(0x7U << 0);                          // TBS = 0 (8 byte data)    
 
+    // Configure Standard ID Filter location and size
+    FDCAN1->SIDFC = (9 << 16) |                            // LSS = 28 filter elements
+                    ((FDCAN_Std_Filter_RAM_offset/4) << 2); // FLESA = 0x0000/4 = 0x00
+    // Configure Extended ID Filter location and size 
+    FDCAN1->XIDFC = (8 << 16) |                             // LSS = 8 filter elements
+                    ((FDCAN_Ext_Filter_RAM_offset/4) << 2); // FLESA = 0x0070/4 = 0x1C
+    // Configure RX FIFO 0 location and size
+    FDCAN1->RXF0C = (18 << 16) | (1U << 31) |                // F0S = 18 filter elements, Settin in Overwrite mode
+                    ((FDCAN_RX_FIFO0_offset/4) << 2);       // F0SA = 0x00B0/4 = 0x2C
+    // Configure RX FIFO 1 location and size
+    FDCAN1->RXF1C = (18 << 16) | (1U << 31) |                // F1S = 18 filter elements, Settin in Overwrite mode
+                    ((FDCAN_RX_FIFO1_offset/4) << 2);       // F1SA = 0x01D0/4 = 0x74
+    // Configure RX Buffer location and size
+    FDCAN1->RXBC =  ((FDCAN_RX_BUFFER_offset/4) << 2);      // F0SA = 0x02F0/4 = 0xBC
+    // Configure TX Event FIFO location and size
+    FDCAN1->TXEFC = (3 << 16) |                             // TEFS = 3 event FIFO elements
+                    ((FDCAN_TX_EVENT_FIFO_offset/4) << 2);  // F0SA = 0x0890/4 = 0x224
+    // Configure TX Buffer location and size
+    FDCAN1->TXBC =  (18 << 16) |                            // TBS = 18 buffer elements, TFQM = 0 -> FIFO operation
+                    ((FDCAN_TX_BUFFER_offset/4) << 2);      // F0SA = 0x08A8/4 = 0x22A    
 
-    NVIC->ISER[0] |= (1U << 21);    // Enable FDCAN2 interrupt in NVIC (IRQ21)
-    NVIC->IPR[21] = (0 << 6);       // Set NVIC interrupt priority
+    // Configure Interrupt for RX FIFO 0 new message
+    FDCAN1->IE |= BIT(0); // Enable RX FIFO 0 new message interrupt
+    FDCAN1->ILS &= ~BIT(0); // Set RX FIFO 0 new message interrupt line 0
+    FDCAN1->ILE |= BIT(0); // Enable interrupt line 0
 
-    // Start FDCAN operation
-    FDCAN2->CCCR &= ~BIT(4);
-    FDCAN2->CCCR &= ~BIT(3);
-    FDCAN2->CCCR &= ~BIT(2);         // Clear ASM
-    FDCAN2->CCCR &= ~BIT(1);         // Clear CCE bit to allow normal operation
-    FDCAN2->CCCR &= ~BIT(0);         // Clear INIT bit to start operation
+    // Enable NVIC interrupt for FDCAN1
+    NVIC->ISER[0] |= (1 << 19);        // FDCAN1_IT0_IRQn = 19,
 
-    counter_loop = 0;
-    while (FDCAN2->CCCR & BIT(0))    // Wait until INIT bit is cleared
-    {                                   
+    // Start FDCAN1 and exit initialization mode
+    FDCAN1->CCCR &= ~BIT(4);
+    FDCAN1->CCCR &= ~BIT(3);
+    FDCAN1->CCCR &= ~BIT(2);
+    FDCAN1->CCCR &= ~BIT(1); // Clear CCE bit to disable configuration changes
+    FDCAN1->CCCR &= ~BIT(0); // Clear INIT bit to exit initialization mode
+
+    counter_loop = 0; // Reset counter for waiting loops
+    while (FDCAN1->CCCR & BIT(0))  // Wait until INIT bit is cleared
+    {
         if (counter_loop > 1000) {
-            return false;
+            return false; // Initialization failed      
         }
         counter_loop++;
-    }
-    
-    return true;                     // Return success
-}
+    };
 
-//  function for initializing  FDCAN messages for INA228
-//  ------------------------------------
-//  Parameters:  Frame: pointer to the CAN_TxBufferElement structure
-//               to hold the initialized messages
-//  Returns:     true if successful, false if initialization fails  
-//  ------------------------------------
-bool Init_FDCAN_INA228_Message(CAN_TxBufferElement *Frame) {
-    for (uint8_t i = 0; i < 10; i++) {
-        Frame[i].T0 = ((0x426U + i) << 18) | (0U << 29) | (0U << 30) | (0U << 31); // ID = 0x426, Data frame
-        Frame[i].T1 = (0x08U << 16) | (0U << 20) | (0U << 21) | (0U << 23); // 8 byte, classic CAN
-            for (int j = 0; j < 8; j++) {
-                Frame[i].data[j] = 0; // Initialize data bytes to 0
-            }
-    }
-    return true; // Return success
+    return true; // Initialization successful
 }
 
 
+bool FDCAN1_transmit_message(CAN_TxBufferElement *tx_frame) {
+    uint32_t txfqs = FDCAN1->TXFQS; // Read TX FIFO/queue status register
+    uint32_t fill_level = txfqs & 0x3F; // Get fill level
+    uint32_t put_index = (txfqs >> 16) & 0x1F;  // TX FIFO Put Index (where to write next)
+   
 
-
-
-
-//  function for sending a standart CAN frame through FDCAN2 Interface
-//  ------------------------------------
-//  Parameters:  TxFrame: pointer to the CAN_TxBufferElement structure
-//               containing the message to be sent
-//  Returns:     1=success, 0=fail 
-//  ------------------------------------
-
-bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame) {
-    FDCAN2->TXBC &= ~BIT(24); // TX fifo operatioon mode
-
-    uint32_t txfqs = FDCAN2->TXFQS; // Get Tx FIFO queue status
-    uint32_t free_level = (txfqs & 0x7U); // Get free level (TFFL) of Tx FIFO
-    
-    if (free_level == 0) { // Check if Tx FIFO is empty
-        return false; // Tx FIFO is full
+    // Check if there is space in the TX buffer
+    if (fill_level >= 18) {    // Check if TX buffer is full (18 is the size of the TX buffer)
+        return false;       // No space available
     }
-    
-    uint8_t put_index = (txfqs >> 16) & 0x3U; // Put index (TFQPI)
-    
-    FDCAN2_TxBuffer[put_index] = *TxFrame; // Copy the message to the Tx buffer
 
-    if (put_index == 0) FDCAN2->TXBAR |= BIT(0); // Set Tx buffer request pending (TFRP) for buffer 0
-    else if (put_index == 1) FDCAN2->TXBAR |= BIT(1); // Set Tx buffer request pending (TFRP) for buffer 1
-    else if (put_index == 2) FDCAN2->TXBAR |= BIT(2); // Set Tx buffer request pending (TFRP) for buffer 2
-    return true; // Message sent successfully --> only true to if check if Tx FIFO is empty
-    // Note: The function does not check for Tx FIFO full condition
-    // and assumes that the caller has already checked the FIFO status. ---->>> need to check!!
-    // need to check error status in main!
+    // Create a pointer to the TX buffer element in message RAM with put_index
+    volatile CAN_TxBufferElement *tx_buffer = (CAN_TxBufferElement*) (FDCAN_MESSAGE_RAM_BASE 
+        + FDCAN1_MESSAGE_RAM_BASE_offset + FDCAN_TX_BUFFER_offset + (put_index * sizeof(CAN_TxBufferElement)));
+
+    // Copy the message to the TX buffer
+    tx_buffer->T0 = tx_frame->T0;
+    tx_buffer->T1 = tx_frame->T1;
+    memcpy((void*)tx_buffer->data, tx_frame->data, 8);  // Copy 8 bytes safely
+
+    // Request transmission
+    FDCAN1->TXBAR |= (1U << put_index); // Set the corresponding bit in the Tx Buffer Add Request Register
+
+    return true; // Message queued for transmission
 }
-
-
 
 

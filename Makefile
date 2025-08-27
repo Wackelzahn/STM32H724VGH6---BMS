@@ -1,14 +1,15 @@
 CFLAGS  ?=  -W -Wall -Wextra -Werror -Wundef -Wshadow -Wdouble-promotion \
             -Wformat-truncation -fno-common -Wconversion \
             -g3 -O0 -ffunction-sections -fdata-sections -I. \
-            -mcpu=cortex-m0plus -mthumb $(EXTRA_CFLAGS)
+            -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard $(EXTRA_CFLAGS)
 LDFLAGS ?= -Tlink.ld -nostartfiles -nostdlib --specs nano.specs -lc -lgcc -Wl,--gc-sections -Wl,-Map=$@.map
 SOURCES = main.c 
 
 # Libraries source files
+######
 SOURCES += src/startup.c
-SOURCES += src/I2C.c
-SOURCES += src/INA228.c
+# SOURCES += src/I2C.c
+# SOURCES += src/INA228.c
 SOURCES += src/can.c
 
 
