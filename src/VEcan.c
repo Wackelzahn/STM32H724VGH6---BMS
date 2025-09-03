@@ -13,6 +13,7 @@ uint8_t splitter[2];
 
 
 
+
 unsigned char mes[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned char bmsname[8] = {'C', 'F', 'P', ' ', 'B', 'M', 'S', ' '}; // Comprehensice Full Protection BMS
 unsigned char bmsmanu[8] = {'C', '.', 'E', '.', ' ', 'E', 'N', 'G'};
@@ -25,23 +26,23 @@ double PackVoltage = 46.7;
 float AvgTemperature = 20.5;
 uint16_t currentact = 0;
 
-CAN_TX_FRAME threefiftyone;
-CAN_TX_FRAME threefiftyfive;
-CAN_TX_FRAME threefiftysix;
-CAN_TX_FRAME threefiftyA;
-CAN_TX_FRAME threefiftyE;
-CAN_TX_FRAME threefiftyF;
-CAN_TX_FRAME threesixty;
-CAN_TX_FRAME threeseventytwo;
-CAN_TX_FRAME threeseventythree;
-CAN_TX_FRAME threeseventyfour;
-CAN_TX_FRAME threeseventyfive;
-CAN_TX_FRAME threeseventysix;
-CAN_TX_FRAME threeseventyseven;
-CAN_TX_FRAME threeseventyeight;     // charged and discharged Energy
-CAN_TX_FRAME threeseventynine;      // Installed total capacity
-CAN_TX_FRAME threeeighty;           // snPart1
-CAN_TX_FRAME threeeightyone;        // snPart2
+CAN_TxBufferElement threefiftyone;
+CAN_TxBufferElement threefiftyfive;
+CAN_TxBufferElement threefiftysix;
+CAN_TxBufferElement threefiftyA;
+CAN_TxBufferElement threefiftyE;
+CAN_TxBufferElement threefiftyF;
+CAN_TxBufferElement threesixty;
+CAN_TxBufferElement threeseventytwo;
+CAN_TxBufferElement threeseventythree;
+CAN_TxBufferElement threeseventyfour;
+CAN_TxBufferElement threeseventyfive;
+CAN_TxBufferElement threeseventysix;
+CAN_TxBufferElement threeseventyseven;
+CAN_TxBufferElement threeseventyeight;     // charged and discharged Energy
+CAN_TxBufferElement threeseventynine;      // Installed total capacity
+CAN_TxBufferElement threeeighty;           // snPart1
+CAN_TxBufferElement threeeightyone;        // snPart2
 
 
 
@@ -52,8 +53,9 @@ void VECan_Init () {
     splitter[1] = ((uint8_t)SOH >> 8);
 
     // Frame 0x380 Serial No. Part 1
-    threeeighty.identifier = 0x0380;
-    threeeighty.length = 0x0008U;
+    threeeighty.T0 = (0x380U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeeighty.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeeighty.T1 |= (8U << 16); // DLC = 8
     threeeighty.data[0] = 'L';
     threeeighty.data[1] = 'B';
     threeeighty.data[2] = '0';
@@ -64,8 +66,9 @@ void VECan_Init () {
     threeeighty.data[7] = snPart1[7];
 
     // Frame 0x381 Serial No. Part 2
-    threeeightyone.identifier = 0x0381;
-    threeeightyone.length = 0x0008U;
+    threeeightyone.T0 = (0x381U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeeightyone.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeeightyone.T1 |= (8U << 16); // DLC = 8
     threeeightyone.data[0] = snPart2[0];
     threeeightyone.data[1] = snPart2[1];
     threeeightyone.data[2] = snPart2[2];
@@ -76,14 +79,16 @@ void VECan_Init () {
     threeeightyone.data[7] = snPart2[7];
 
     // Frame 0x379 Installed total capacity
-    threeseventynine.identifier = 0x0379;
-    threeseventynine.length = 0x0002U;
+    threeseventynine.T0 = (0x379U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventynine.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventynine.T1 |= (8U << 16); // DLC = 8
     threeseventynine.data[0] = 0x30;        //  LSB of 0x0230 = 560d
     threeseventynine.data[1] = 0x02;        //  MSB
 
     // Frame 0x378 charged and discharged energy 
-    threeseventyeight.identifier = 0x0378;
-    threeseventyeight.length = 0x0008U;
+    threeseventyeight.T0 = (0x378U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventyeight.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventyeight.T1 |= (8U << 16); // DLC = 8
     threeseventyeight.data[0] = 0xA8;   // example 69kw/h -> 0x02A8 = 690
     threeseventyeight.data[1] = 0x02;
     threeseventyeight.data[2] = 0x00;
@@ -94,8 +99,9 @@ void VECan_Init () {
     threeseventyeight.data[7] = 0x00;
 
     // Frame 0x377 Cell Name with Maximum Cell Temperature
-    threeseventyseven.identifier = 0x0377;
-    threeseventyseven.length = 0x0008U;
+    threeseventyseven.T0 = (0x377U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventyseven.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventyseven.T1 |= (8U << 16); // DLC = 8
     threeseventyseven.data[0] = '0';   // 0301 Cell 03 Bank 01
     threeseventyseven.data[1] = '3';
     threeseventyseven.data[2] = '0';
@@ -106,8 +112,9 @@ void VECan_Init () {
     threeseventyseven.data[7] = 0x00;
     
     // Frame 0x376 Cell Name with Minimum Cell Temperature
-    threeseventysix.identifier = 0x0376;
-    threeseventysix.length = 0x0008U;
+    threeseventysix.T0 = (0x376U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventysix.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventysix.T1 |= (8U << 16); // DLC = 8
     threeseventysix.data[0] = '1';   // 1601 Cell 03 Bank 01
     threeseventysix.data[1] = '6';
     threeseventysix.data[2] = '0';
@@ -118,8 +125,9 @@ void VECan_Init () {
     threeseventysix.data[7] = 0x00;
 
     // Frame 0x375 Cell Name with MAX Cell Voltage
-    threeseventyfive.identifier = 0x0375;
-    threeseventyfive.length = 0x0008U;
+    threeseventyfive.T0 = (0x375U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventyfive.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventyfive.T1 |= (8U << 16); // DLC = 8
     threeseventyfive.data[0] = '1';   // 1201 Cell 03 Bank 01
     threeseventyfive.data[1] = '2';
     threeseventyfive.data[2] = '0';
@@ -130,8 +138,9 @@ void VECan_Init () {
     threeseventyfive.data[7] = 0x00;
 
     // Frame 0x374 Cell Name with MIN Cell Voltage
-    threeseventyfour.identifier = 0x0374;
-    threeseventyfour.length = 0x0008U;
+    threeseventyfour.T0 = (0x374U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventyfour.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventyfour.T1 |= (8U << 16); // DLC = 8
     threeseventyfour.data[0] = '0';   // 0701 Cell 03 Bank 01
     threeseventyfour.data[1] = '7';
     threeseventyfour.data[2] = '0';
@@ -142,8 +151,9 @@ void VECan_Init () {
     threeseventyfour.data[7] = 0x00;
 
     // Frame 0x373 Cell Info: Voltage and Temperature
-    threeseventythree.identifier = 0x0373;
-    threeseventythree.length = 0x0008U; 
+    threeseventythree.T0 = (0x373U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventythree.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventythree.T1 |= (8U << 16); // DLC = 8
     threeseventythree.data[0] = 0x01;   // LSB lowest cell voltage
     threeseventythree.data[1] = 0x0D;   // MSB
     threeseventythree.data[2] = 0x08;   // LSB highest cell voltage
@@ -155,8 +165,9 @@ void VECan_Init () {
 
 
     // Frame 0x372 Battery Bank Info
-    threeseventytwo.identifier = 0x0372;
-    threeseventytwo.length = 0x0008U; 
+    threeseventytwo.T0 = (0x372U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threeseventytwo.T1 = 0; // No EFC, no FDF, no BRS, 
+    threeseventytwo.T1 |= (8U << 16); // DLC = 8
     threeseventytwo.data[0] = 0x02;   // LSB no. Batteries online
     threeseventytwo.data[1] = 0x00;   // MSB
     threeseventytwo.data[2] = 0x01;   // LSB no. Batteries blocked charge
@@ -167,13 +178,15 @@ void VECan_Init () {
     threeseventytwo.data[7] = 0x00;   // MSB
 
     // Frame 0x360 Battery Bank Info
-    threesixty.identifier = 0x0360;
-    threesixty.length = 0x0001U; 
+    threesixty.T0 = (0x360U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threesixty.T1 = 0; // No EFC, no FDF, no BRS, 
+    threesixty.T1 |= (8U << 16); // DLC = 8
     threesixty.data[0] = 0x00;   // unknown
 
     // Frame 0x35F Battery Info Firmware & Capacity available
-    threefiftyF.identifier = 0x035F;
-    threefiftyF.length = 0x0008U; 
+    threefiftyF.T0 = (0x35FU << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftyF.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftyF.T1 |= (8U << 16); // DLC = 8 
     threefiftyF.data[0] = 0x01;   // firmware version high
     threefiftyF.data[1] = 0x00;   // firmware version low
     threefiftyF.data[2] = 0x6E;   // hardware version high
@@ -184,8 +197,9 @@ void VECan_Init () {
     threefiftyF.data[7] = 0x00;   // 
 
     // Frame 0x35E Manufacturer Info / Name
-    threefiftyE.identifier = 0x035E;
-    threefiftyE.length = 0x0008U; 
+    threefiftyE.T0 = (0x35EU << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftyE.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftyE.T1 |= (8U << 16); // DLC = 8 
     threefiftyE.data[0] = 'C';   
     threefiftyE.data[1] = '.';   
     threefiftyE.data[2] = 'E';   
@@ -196,8 +210,9 @@ void VECan_Init () {
     threefiftyE.data[7] = 'G';   
 
     // Frame 0x35A Alarms / Warnings
-    threefiftyA.identifier = 0x035A;
-    threefiftyA.length = 0x0008U; 
+    threefiftyA.T0 = (0x35AU << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftyA.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftyA.T1 |= (8U << 16); // DLC = 8 
     threefiftyA.data[0] = 0x00;
     threefiftyA.data[1] = 0x00;  
     threefiftyA.data[2] = 0x00;    
@@ -208,8 +223,9 @@ void VECan_Init () {
     threefiftyA.data[7] = 0x00;    
 
     // Frame 0x356 Battery Status: Voltage, Current, Temperature
-    threefiftysix.identifier = 0x0356;
-    threefiftysix.length = 0x0008U; 
+    threefiftysix.T0 = (0x356U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftysix.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftysix.T1 |= (8U << 16); // DLC = 8 
     threefiftysix.data[0] = 0x8E;   // LSB voltage in Millivolt
     threefiftysix.data[1] = 0x14;   // MSB
     threefiftysix.data[2] = 0xF9;   // LSB (A/10) DeciAmp, signed!
@@ -220,8 +236,9 @@ void VECan_Init () {
     threefiftysix.data[7] = 0x00; 
     
     // Frame 0x355 Battery State Info SOC & SOH
-    threefiftyfive.identifier = 0x0355;
-    threefiftyfive.length = 0x0004U; 
+    threefiftyfive.T0 = (0x355U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftyfive.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftyfive.T1 |= (8U << 16); // DLC = 8 
     threefiftyfive.data[0] = 0x33;   // LSB SOC (%)
     threefiftyfive.data[1] = 0x00;   // MSB
     threefiftyfive.data[2] = (uint8_t)SOH & 0xff;   // LSB SOH (%)
@@ -229,10 +246,11 @@ void VECan_Init () {
   
 
     // Frame 0x351 DVCC: CVL, CCL, DCL, DVL
-    threefiftyone.identifier = 0x0351;
-    threefiftyone.length = 0x0008U; 
+    threefiftyone.T0 = (0x351U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftyone.T1 = 0; // No EFC, no FDF, no BRS, 
+    threefiftyone.T1 |= (8U << 16); // DLC = 8 
     threefiftyone.data[0] = 0x38;   // LSB (V/10) DeciVolt CVL 
-    threefiftyone.data[1] = 0x02;   // MSB
+    threefiftyone.data[1] = 0x20;   // MSB
     threefiftyone.data[2] = 0xE8;   // LSB (A/10) DeciAmp CCL 
     threefiftyone.data[3] = 0x03;   // MSB
     threefiftyone.data[4] = 0xE8;   // LSB (A/10) DeciAmp DCL
@@ -245,22 +263,22 @@ void VECan_Init () {
 
 }
 
-void VECan_send () {
-    Can_SendMessage(CAN1, &threeeighty);
-    Can_SendMessage(CAN1, &threeeightyone);
-    Can_SendMessage(CAN1, &threeseventynine);
-    Can_SendMessage(CAN1, &threeseventyeight);
-    Can_SendMessage(CAN1, &threeseventyseven);
-    Can_SendMessage(CAN1, &threeseventysix);
-    Can_SendMessage(CAN1, &threeseventyfive);
-    Can_SendMessage(CAN1, &threeseventyfour);
-    Can_SendMessage(CAN1, &threeseventythree);
-    Can_SendMessage(CAN1, &threeseventytwo);
-    Can_SendMessage(CAN1, &threesixty);
-    Can_SendMessage(CAN1, &threefiftyF);
-    Can_SendMessage(CAN1, &threefiftyE);
-    Can_SendMessage(CAN1, &threefiftyA);
-    Can_SendMessage(CAN1, &threefiftysix);
-    Can_SendMessage(CAN1, &threefiftyfive);
-    Can_SendMessage(CAN1, &threefiftyone);
+void VECan_send (void) {
+    FDCAN2_transmit_message(&threeeighty);
+    FDCAN2_transmit_message(&threeeightyone);
+    FDCAN2_transmit_message(&threeseventynine);
+    FDCAN2_transmit_message(&threeseventyeight);
+    FDCAN2_transmit_message(&threeseventyseven);
+    FDCAN2_transmit_message(&threeseventysix);
+    FDCAN2_transmit_message(&threeseventyfive);
+    FDCAN2_transmit_message(&threeseventyfour);
+    FDCAN2_transmit_message(&threeseventythree);
+    FDCAN2_transmit_message(&threeseventytwo);
+    FDCAN2_transmit_message(&threesixty);
+    FDCAN2_transmit_message(&threefiftyF);
+    FDCAN2_transmit_message(&threefiftyE);
+    FDCAN2_transmit_message(&threefiftyA);
+    FDCAN2_transmit_message(&threefiftysix);
+    FDCAN2_transmit_message(&threefiftyfive);
+    FDCAN2_transmit_message(&threefiftyone);
 }

@@ -22,10 +22,11 @@ typedef struct {
 } CAN_RxBufferElement;
 
 
-
 // function declarations
 bool FDCAN1_init(void);
-bool FDCAN1_transmit_message(CAN_TxBufferElement *tx_frame) ;
+bool FDCAN2_init(void);
+bool FDCAN1_transmit_message(CAN_TxBufferElement *tx_frame);
+bool FDCAN2_transmit_message(CAN_TxBufferElement *tx_frame);
 // bool Init_FDCAN_INA228_Message(CAN_TxBufferElement *Frame);
 // bool FDCAN2_Send_Std_CAN_Message(CAN_TxBufferElement *TxFrame);
 

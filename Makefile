@@ -8,9 +8,10 @@ SOURCES = main.c
 # Libraries source files
 ######
 SOURCES += src/startup.c
-# SOURCES += src/I2C.c
-# SOURCES += src/INA228.c
+SOURCES += src/rtc.c
+SOURCES += src/VEcan.c
 SOURCES += src/can.c
+SOURCES += src/shunt_can.c
 
 
 # Include files from libraries

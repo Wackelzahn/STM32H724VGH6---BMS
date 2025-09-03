@@ -338,7 +338,30 @@ struct gpio {
 #define GPIOF ((struct gpio *) 0x58021400)
 
 
-
-
+// Register RTC 
+struct rtc {
+    volatile uint32_t TR;        // 0x00
+    volatile uint32_t DR;        // 0x04  
+    volatile uint32_t CR;        // 0x08
+    volatile uint32_t ISR;       // 0x0C
+    volatile uint32_t PRER;      // 0x10
+    volatile uint32_t WUTR;      // 0x14
+    volatile uint32_t reserved1; // 0x18
+    volatile uint32_t ALRMAR;    // 0x1C
+    volatile uint32_t ALRMBR;    // 0x20
+    volatile uint32_t WPR;       // 0x24
+    volatile uint32_t SSR;       // 0x28
+    volatile uint32_t SHIFTR;    // 0x2C
+    volatile uint32_t TSTR;      // 0x30
+    volatile uint32_t TSDR;      // 0x34
+    volatile uint32_t TSSSR;     // 0x38
+    volatile uint32_t CALR;      // 0x3C
+    volatile uint32_t TAMPCR;    // 0x40
+    volatile uint32_t ALRMASSR;  // 0x44
+    volatile uint32_t ALRMBSSR;  // 0x48
+    volatile uint32_t OR;        // 0x4C
+    volatile uint32_t BKP0R;     // 0x50
+};
+#define RTC ((struct rtc *) 0x58004000)
 
 #endif

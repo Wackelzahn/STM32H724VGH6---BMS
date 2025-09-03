@@ -1,6 +1,7 @@
 
 
-
+in Terminal:
+git init
 
 
 
@@ -8,7 +9,15 @@ https://github.com/Wackelzahn/STM32G0B1_Shunt.git
 
 git add .
 
-git commit -am "Second commit"
+git commit -am "first commit"
+
+git remote add origin https://github.com/Wackelzahn/STM32H724VGH6---BMS.git
+
+check for correct push location:
+git remote -v
+
+if different then:
+git remote set-url origin https://github.com/Wackelzahn/STM32H724VGH6---BMS.git
 
 git push origin master
 

@@ -28,6 +28,9 @@
 #include <string.h>
 #include "registers.h"
 #include "can.h"
+#include "rtc.h"
+#include "VEcan.h"
+#include "shunt_can.h"
 
 
 
@@ -53,6 +56,24 @@ uint32_t fifo_message_lost_counter = 0; // counter for FIFO message lost events
 // in interrupt handlers or memory mapped registers. Or are modified by threads  / tasks.
 
 volatile uint32_t tick = 0;
+bool zonk = false; // for testing only
+uint8_t seconds = 0; // seconds counter
+uint8_t minutes = 0; // minutes counter
+RTC_DateTime dt;
+
+// Debug variables 
+volatile int32_t current = 0;
+volatile int32_t bus_voltage = 0;
+volatile int32_t temperature = 0;
+volatile int32_t shunt_voltage = 0;
+volatile double power = 0;
+volatile uint16_t die_id = 0;
+volatile uint16_t manufacturer_id = 0;
+volatile double energy = 0;
+volatile int64_t charge = 0;
+
+volatile uint32_t temp[16]; // for testing only
+
 
 //------------------------------------------------------------
 // Constants and definitions
@@ -151,7 +172,17 @@ void gpio_init_PC0(void) {
 // Functions
 // -----------------------------------------------------------
 
+// CPACR register address for Cortex-M7
+#define CPACR_REG   (*((volatile uint32_t*)0xE000ED88))
 
+void enable_fpu(void) {
+    // Enable CP10 and CP11 coprocessors (FPU)
+    CPACR_REG |= (0xF << 20);  // Set bits 23:20 to 1111
+    
+    // Memory barriers to ensure FPU is enabled before use
+    __asm volatile ("dsb");
+    __asm volatile ("isb");
+}
 
 //------------------------------------------------------------
 // Main function
@@ -159,6 +190,8 @@ void gpio_init_PC0(void) {
 
 int main(void) {
   
+  enable_fpu(); // Enable FPU for floating point operations
+
   // for testing only
   // Standard ID 0x127, no RTR, no XTD, 
   tx_127.T0 = (0x127U << 18) | (0x0U << 29) | (0x0U << 30); 
@@ -173,7 +206,7 @@ int main(void) {
   tx_127.data[6] = 0xB2;  
   tx_127.data[7] = 0x1E;
 
-  tx_128.T0 = (0x127U << 18) | (0x0U << 29) | (0x0U << 30); 
+  tx_128.T0 = (0x128U << 18) | (0x0U << 29) | (0x0U << 30); 
   tx_128.T1 = 0; // No EFC, no FDF, no BRS, 
   tx_128.T1 |= (8U << 16); // DLC = 8
   tx_128.data[0] = 0xFF;
@@ -191,8 +224,14 @@ int main(void) {
   // Enable interrupts globally
   __asm("cpsie i");
   FDCAN1_init(); // Initialize FDCAN1 interface
+  FDCAN2_init(); // Initialize FDCAN2 interface
+  VECan_Init (); // Initialize VE CAN messages
+  VECan_send(); // Send VE CAN messages once at startup
+  if (RTC_init()) zonk =1; // Initialize RTC interface
+  dt = RTC_read_datetime(); // Read current date and time
+    seconds = dt.seconds; // get current seconds
+    minutes = dt.minutes; // get current minutes
 
-  FDCAN1_transmit_message(&tx_127); // Transmit test message
 
   while (1) {
   //  if (fifo_full_counter > 0) {
@@ -212,7 +251,7 @@ int main(void) {
 //------------------------------------------------------------
 
 // SysTick interrupt handler
-// This function is called every 10ms
+// This function is called every 100ms
 void SysTick_IRQHandler(void) {
   
   tick++;                   // Increment the tick counter
@@ -222,6 +261,16 @@ void SysTick_IRQHandler(void) {
     GPIOC->ODR ^= (1 << 0); // PC0 at 1Hz
     FDCAN1_transmit_message(&tx_127); // Transmit test message
     FDCAN1_transmit_message(&tx_128); // Transmit test message
+    VECan_send (); // Send VE CAN messages every second
+    current = convert_0x0426_to_milliampere(rx_message_426); // convert shunt message to current in mA
+    bus_voltage = convert_0x0427_to_millivolts(rx_message_427); // convert shunt message to voltage in mV
+    temperature = convert_0x0428_to_temperature(rx_message_428); // convert shunt message to temperature in 1/100 °C
+    shunt_voltage = convert_0x0429_to_microvolts(rx_message_429); // convert shunt message to voltage in uV
+    power = convert_0x042A_to_milliwatts(rx_message_42A); // convert shunt message to power in mW
+    die_id = convert_0x042B_to_DieID(rx_message_42B); // convert shunt message to die ID
+    manufacturer_id = convert_0x042C_to_ManufacturerID(rx_message_42C); // convert shunt message to manufacturer ID
+    energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in uWh
+    charge = convert_0x042E_to_charge(rx_message_42E); // convert shunt message to charge in uAh
   }
 }
   
