@@ -73,17 +73,19 @@ float convert_0x042A_to_power (uint8_t* data) {
         return 0; // Handle null pointer
     }
 
-    // Extract the power value from the first four bytes
-    uint32_t power_raw = data[3] | (data[2] << 8) | (data[1] << 16) | (data[0] << 24);
-
+    // Reconstruct 32-bit word (MSB first). Cast before shifting to avoid issues with sign extension.
+    uint32_t power_raw = (uint32_t)data[3] | ((uint32_t)data[2] << 8) | ((uint32_t)data[1] << 16) | ((uint32_t)data[0] << 24);
+    
+    // Keep only the lower 24 bits and sign extend 24 -> 32 bits if necessary
+    // However according to INA228 datasheet, power is alsways positive
     uint32_t intermediate = power_raw & 0x00FFFFFFU; // Mask to 24 bits
     if (intermediate & 0x00800000U) intermediate |= 0xFF000000U; // Sign extend if negative
     int32_t power = (int32_t)intermediate; // Now power is a signed 32-bit integer
-
+    
     // Conversion is power[W] = (CURRENT_LSB * POWER * 3.2) with Current_LSB = 1/3200 
     // this gives a factor of 3.2/3200 = 0.001
     float power_W = (float)(power) * 0.001f; // Convert See Datasheet INA228 (Power[W] = CURRENT_LSB * POWER * 3.2 // Current_LSB = 1/3200 A
-
+    
     return power_W; // Power in Watts
 }
 
@@ -122,7 +124,7 @@ float convert_0x042D_to_energy (uint8_t* data) {
     // and safe processor resources, the values are shifted and combined accordingly.
     // by shifting the 40 valuable bist by 8 to the right we introduce a little error which is neglectable for our application
     // by shiftingh we divide the value by 256 which needs to be corrected later once we cast the uint32 result into float 
-    uint32_t energy = ((uint32_t)data[6] | (data[5] << 8) | (data[4] << 16) | (data[3] << 24));
+    int32_t energy = ((uint32_t)data[6] | (data[5] << 8) | (data[4] << 16) | (data[3] << 24));
 
     // energy_J = (energy) / 3200) * 3.2 * 16; // Convert See Datasheet INA228   
     // avoid division for efficciency and avboud using int64 and float64
@@ -132,7 +134,7 @@ float convert_0x042D_to_energy (uint8_t* data) {
  
     float energy_J = (float)energy * 4.096f;    // Multiply by 4.096
 
-    return energy_J; // Energy in Joules
+    return energy_J; // Energy in Joules (Ws)
 }
 
 float convert_0x042E_to_charge (uint8_t* data) {
@@ -142,11 +144,11 @@ float convert_0x042E_to_charge (uint8_t* data) {
     }
 
     // Constructing the charge value from the 8-byte CAN array
-    // Valuable information is 40bit. To construct a 32bit value for efficient calculations
+    // Valuable information is 40bit signed. To construct a 32bit signed value for efficient calculations
     // the values are shifted and combined accordingly.
     // by shifting the 40 valuable bist by 8 to the right we introduce a little error which is neglectable for our application
     // by shiftingh we divide the value by 256 which needs to be corrected later once we cast the uint32 result into float 
-    uint32_t charge = ((uint32_t)data[6] | (data[5] << 8) | (data[4] << 16) | (data[3] << 24));
+    int32_t charge = ((uint32_t)data[6] | ((uint32_t)data[5] << 8) | ((uint32_t)data[4] << 16) | ((uint32_t)data[3] << 24));
 
     // charge_C = (charge) / 3200; // Convert See Datasheet INA228
     // avoid division for efficciency
@@ -158,7 +160,7 @@ float convert_0x042E_to_charge (uint8_t* data) {
 
     // can charge be negative, so we need to handle that ??? to check!!
 
-     return charge_C; // Charge in 
+     return charge_C; // Charge in Coulombs (As)
 }
 
 // End of file

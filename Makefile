@@ -12,6 +12,7 @@ SOURCES += src/rtc.c
 SOURCES += src/VEcan.c
 SOURCES += src/can.c
 SOURCES += src/shunt_can.c
+SOURCES += src/conversion.c
 
 
 # Include files from libraries

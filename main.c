@@ -31,6 +31,7 @@
 #include "rtc.h"
 #include "VEcan.h"
 #include "shunt_can.h"
+#include "conversion.h"
 
 
 
@@ -55,6 +56,8 @@ uint32_t fifo_message_lost_counter = 0; // counter for FIFO message lost events
 // and to ensure they are always read from memory. Use for variables that are used
 // in interrupt handlers or memory mapped registers. Or are modified by threads  / tasks.
 
+
+
 volatile uint32_t tick = 0;
 bool zonk = false; // for testing only
 uint8_t seconds = 0; // seconds counter
@@ -72,6 +75,7 @@ volatile uint16_t manufacturer_id = 0;
 volatile float energy = 0;
 volatile float charge = 0;
 volatile float charge_Ah = 0; // charge in Ah
+volatile float energy_kWh = 0; // energy in kWh
 
 volatile uint32_t temp[16]; // for testing only
 
@@ -185,6 +189,9 @@ void enable_fpu(void) {
     __asm volatile ("isb");
 }
 
+
+
+
 //------------------------------------------------------------
 // Main function
 //------------------------------------------------------------
@@ -236,13 +243,27 @@ int main(void) {
 
   while (1) {
   //  if (fifo_full_counter > 0) {
-      // Error handling for FIFO full
-   //   void FDCAN1_IT0_IRQHandler(void); // Call the interrupt handler to clear the flag
-  //  }
-  //  if (fifo_message_lost_counter > 0) {
-   //   // Error handling for message lost
-   //   void FDCAN1_IT0_IRQHandler(void); // Call the interrupt handler to clear the flag
-  //  }
+    if (zonk) {
+      zonk = false;
+      FDCAN1_transmit_message(&tx_127); // Transmit test message
+      FDCAN1_transmit_message(&tx_128); // Transmit test message
+      
+      current = convert_0x0426_to_milliampere(rx_message_426); // convert shunt message to current in mA
+      bus_voltage = convert_0x0427_to_millivolts(rx_message_427); // convert shunt message to voltage in mV
+      temperature = convert_0x0428_to_temperature(rx_message_428); // convert shunt message to temperature in 1/100 °C
+      shunt_voltage = convert_0x0429_to_microvolts(rx_message_429); // convert shunt message to voltage in uV
+      power = convert_0x042A_to_power(rx_message_42A); // convert shunt message to power in mW
+      die_id = convert_0x042B_to_DieID(rx_message_42B); // convert shunt message to die ID
+      manufacturer_id = convert_0x042C_to_ManufacturerID(rx_message_42C); // convert shunt message to manufacturer ID
+      energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in Joule (Ws)
+      charge = convert_0x042E_to_charge(rx_message_42E); // convert shunt message to charge in Coulomb (As)
+      charge_Ah = charge * 0.0002777777f; // convert charge to Ah
+      energy_kWh = energy * 0.0000002777777f; // convert energy to kWh
+      
+      update_can_message_356(&threefiftysix, current, bus_voltage, temperature);
+
+      VECan_send (); // Send VE CAN messages every 200ms
+    }
 
 }
 }
@@ -257,22 +278,11 @@ void SysTick_IRQHandler(void) {
   
   tick++;                   // Increment the tick counter
   
-  if (tick == 5) {          // 10 ticks = 1 second
+  if (tick == 2) {          // 2 ticks = 0.2 second
     tick = 0;               // Reset the tick counter
     GPIOC->ODR ^= (1 << 0); // PC0 at 1Hz
-    FDCAN1_transmit_message(&tx_127); // Transmit test message
-    FDCAN1_transmit_message(&tx_128); // Transmit test message
-    VECan_send (); // Send VE CAN messages every second
-    current = convert_0x0426_to_milliampere(rx_message_426); // convert shunt message to current in mA
-    bus_voltage = convert_0x0427_to_millivolts(rx_message_427); // convert shunt message to voltage in mV
-    temperature = convert_0x0428_to_temperature(rx_message_428); // convert shunt message to temperature in 1/100 °C
-    shunt_voltage = convert_0x0429_to_microvolts(rx_message_429); // convert shunt message to voltage in uV
-    power = convert_0x042A_to_power(rx_message_42A); // convert shunt message to power in mW
-    die_id = convert_0x042B_to_DieID(rx_message_42B); // convert shunt message to die ID
-    manufacturer_id = convert_0x042C_to_ManufacturerID(rx_message_42C); // convert shunt message to manufacturer ID
-    energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in Joule (Ws)
-    charge = convert_0x042E_to_charge(rx_message_42E); // convert shunt message to charge in Coulomb (As)
-    charge_Ah = charge * 0.0002777777f; // convert charge to Ah
+    zonk = true;
+   
   }
 }
 

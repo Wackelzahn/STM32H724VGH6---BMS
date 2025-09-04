@@ -263,6 +263,39 @@ void VECan_Init () {
 
 }
 
+void update_can_message_356(CAN_TxBufferElement* msg_356, 
+                            volatile int32_t current_mA, 
+                            volatile int32_t bus_voltage_mV, 
+                            volatile int32_t temperature_centidegC) {
+    
+    // Setup CAN header for 0x356
+    msg_356->T0 = (0x356U << 18) | (0x0U << 29) | (0x0U << 30); 
+    msg_356->T1 = 0; // No EFC, no FDF, no BRS
+    msg_356->T1 |= (8U << 16); // DLC = 8
+    
+    // Convert voltage from mV to proper format for data[0-1]
+    // Voltage is sent as 16-bit unsigned value in millivolts (little endian)
+    uint16_t voltage_mv = (uint16_t)bus_voltage_mV;
+    msg_356->data[0] = (uint8_t)(voltage_mv & 0xFF);        // LSB
+    msg_356->data[1] = (uint8_t)((voltage_mv >> 8) & 0xFF); // MSB
+    
+    // Convert current from mA to deciamps for data[2-3]
+    // Current in deciamps = current_mA / 100 (signed 16-bit, little endian)
+    int16_t current_dA = (int16_t)(current_mA / 100);
+    msg_356->data[2] = (uint8_t)(current_dA & 0xFF);        // LSB
+    msg_356->data[3] = (uint8_t)((current_dA >> 8) & 0xFF); // MSB
+    
+    // Convert temperature from centidegrees to decidegrees for data[4-5]  
+    // Temperature in decidegrees = temperature_centidegC / 10 (signed 16-bit, little endian)
+    int16_t temperature_dT = (int16_t)(temperature_centidegC / 10);
+    msg_356->data[4] = (uint8_t)(temperature_dT & 0xFF);        // LSB
+    msg_356->data[5] = (uint8_t)((temperature_dT >> 8) & 0xFF); // MSB
+    
+    // Reserved bytes - set to 0
+    msg_356->data[6] = 0x00;
+    msg_356->data[7] = 0x00;
+}
+
 void VECan_send (void) {
     FDCAN2_transmit_message(&threeeighty);
     FDCAN2_transmit_message(&threeeightyone);
