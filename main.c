@@ -69,8 +69,9 @@ volatile int32_t shunt_voltage = 0;
 volatile double power = 0;
 volatile uint16_t die_id = 0;
 volatile uint16_t manufacturer_id = 0;
-volatile double energy = 0;
-volatile int64_t charge = 0;
+volatile float energy = 0;
+volatile float charge = 0;
+volatile float charge_Ah = 0; // charge in Ah
 
 volatile uint32_t temp[16]; // for testing only
 
@@ -269,11 +270,11 @@ void SysTick_IRQHandler(void) {
     power = convert_0x042A_to_milliwatts(rx_message_42A); // convert shunt message to power in mW
     die_id = convert_0x042B_to_DieID(rx_message_42B); // convert shunt message to die ID
     manufacturer_id = convert_0x042C_to_ManufacturerID(rx_message_42C); // convert shunt message to manufacturer ID
-    energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in uWh
-    charge = convert_0x042E_to_charge(rx_message_42E); // convert shunt message to charge in uAh
+    energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in Joule (Ws)
+    charge = convert_0x042E_to_charge(rx_message_42E); // convert shunt message to charge in Coulomb (As)
+    charge_Ah = charge * 0.0002777777f; // convert charge to Ah
   }
 }
-  
 
 // FDCAN interrupt handler
 // This function is called when a message is received
@@ -384,4 +385,5 @@ void FDCAN1_IT0_IRQHandler(void) {
   }
  
 }
+
 

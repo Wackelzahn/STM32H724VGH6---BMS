@@ -17,6 +17,8 @@
 
 #include "shunt_can.h"
 
+#define KEHRWERT_3200 5764607523034234ULL // 2^64 / 3200
+
 int32_t convert_0x0426_to_milliampere(uint8_t* data) {
 
     if (data == NULL) {
@@ -103,32 +105,52 @@ uint16_t convert_0x042C_to_ManufacturerID (uint8_t* data) {
      return Man_id; // Manufacturer ID
 }
 
-double convert_0x042D_to_energy (uint8_t* data) {
+float convert_0x042D_to_energy (uint8_t* data) {
 
     if (data == NULL) {
-        return 0; // Handle null pointer
+        return 0.0f; // Handle null pointer
     }
 
-    // Extract the energy value from the first eight bytes
-    uint64_t energy = ((uint64_t)data[7] | ((uint64_t)data[6] << 8) | ((uint64_t)data[5] << 16) | ((uint64_t)data[4] << 24) |
-                          ((uint64_t)data[3] << 32) | ((uint64_t)data[2] << 40) | ((uint64_t)data[1] << 48) | ((uint64_t)data[0] << 56));
+    // Constructing the energy value from the 8-byte CAN array
+    // Valuable information is 40bit. To construct a 32bit value for most efficient calculations
+    // and safe processor resources, the values are shifted and combined accordingly.
+    // by shifting the 40 valuable bist by 8 to the right we introduce a little error which is neglectable for our application
+    // by shiftingh we divide the value by 256 which needs to be corrected later once we cast the uint32 result into float 
+    uint32_t energy = ((uint32_t)data[6] | (data[5] << 8) | (data[4] << 16) | (data[3] << 24));
 
-    double energy_J = ((double)(energy) / 3200) * 3.2 * 16; // Convert See Datasheet INA228 (Energy[J] = CURRENT_LSB * ENERGY * 3.2 * 16 , Current_LSB = 1/3200 A
+    // energy_J = (energy) / 3200) * 3.2 * 16; // Convert See Datasheet INA228   
+    // avoid division for efficciency and avboud using int64 and float64
+    // energy has already been divided by 256 by shifting above
+    // we need to correct by multiplying with 256/3200 * 3.2 * 16 = 4.096
+    // however, max conversion error of ~4 Joules is neglectable for our application        
+ 
+    float energy_J = (float)energy * 4.096f;    // Multiply by 4.096
 
-     return energy_J; // Energy in Joules
+    return energy_J; // Energy in Joules
 }
 
-int64_t convert_0x042E_to_charge (uint8_t* data) {
+float convert_0x042E_to_charge (uint8_t* data) {
 
     if (data == NULL) {
-        return 0; // Handle null pointer
+        return 0.0f; // Handle null pointer
     }
 
-    // Extract the charge value from the first eight bytes
-    int64_t charge = ((uint64_t)data[7] | ((uint64_t)data[6] << 8) | ((uint64_t)data[5] << 16) | ((uint64_t)data[4] << 24) |
-                          ((uint64_t)data[3] << 32) | ((uint64_t)data[2] << 40) | ((uint64_t)data[1] << 48) | ((uint64_t)data[0] << 56));
+    // Constructing the charge value from the 8-byte CAN array
+    // Valuable information is 40bit. To construct a 32bit value for efficient calculations
+    // the values are shifted and combined accordingly.
+    // by shifting the 40 valuable bist by 8 to the right we introduce a little error which is neglectable for our application
+    // by shiftingh we divide the value by 256 which needs to be corrected later once we cast the uint32 result into float 
+    uint32_t charge = ((uint32_t)data[6] | (data[5] << 8) | (data[4] << 16) | (data[3] << 24));
 
-    int64_t charge_C = charge / 3200; // Convert See Datasheet INA228 (Charge[C] = CURRENT_LSB * CHARGE   , Current_LSB = 1/3200 A
+    // charge_C = (charge) / 3200; // Convert See Datasheet INA228
+    // avoid division for efficciency
+    // charge has already been divided by 256 by shifting above
+    // error max ~1 Coulomb is neglectable for our application
+    // now only to correct by multiplying with 256/3200 = 0.08
+
+    float charge_C = (float)charge * 0.08f;  // Multiply by (1/3200)*256 = 0.08
+
+    // can charge be negative, so we need to handle that ??? to check!!
 
      return charge_C; // Charge in 
 }
