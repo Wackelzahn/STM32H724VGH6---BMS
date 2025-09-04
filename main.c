@@ -66,7 +66,7 @@ volatile int32_t current = 0;
 volatile int32_t bus_voltage = 0;
 volatile int32_t temperature = 0;
 volatile int32_t shunt_voltage = 0;
-volatile double power = 0;
+volatile float power = 0;
 volatile uint16_t die_id = 0;
 volatile uint16_t manufacturer_id = 0;
 volatile float energy = 0;
@@ -267,7 +267,7 @@ void SysTick_IRQHandler(void) {
     bus_voltage = convert_0x0427_to_millivolts(rx_message_427); // convert shunt message to voltage in mV
     temperature = convert_0x0428_to_temperature(rx_message_428); // convert shunt message to temperature in 1/100 °C
     shunt_voltage = convert_0x0429_to_microvolts(rx_message_429); // convert shunt message to voltage in uV
-    power = convert_0x042A_to_milliwatts(rx_message_42A); // convert shunt message to power in mW
+    power = convert_0x042A_to_power(rx_message_42A); // convert shunt message to power in mW
     die_id = convert_0x042B_to_DieID(rx_message_42B); // convert shunt message to die ID
     manufacturer_id = convert_0x042C_to_ManufacturerID(rx_message_42C); // convert shunt message to manufacturer ID
     energy = convert_0x042D_to_energy(rx_message_42D); // convert shunt message to energy in Joule (Ws)

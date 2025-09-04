@@ -67,18 +67,24 @@ int32_t convert_0x0429_to_microvolts (uint8_t* data) {
      return voltage_uV; // Shunt Voltage in microvolts
 }
 
-double convert_0x042A_to_milliwatts (uint8_t* data) {
+float convert_0x042A_to_power (uint8_t* data) {
 
     if (data == NULL) {
         return 0; // Handle null pointer
     }
 
     // Extract the power value from the first four bytes
-    int32_t power = data[3] | (data[2] << 8) | (data[1] << 16) | (data[0] << 24);
+    uint32_t power_raw = data[3] | (data[2] << 8) | (data[1] << 16) | (data[0] << 24);
 
-    double power_W = ((double)(power) / 3200) * 3.2; // Convert See Datasheet INA228 (Power[W] = CURRENT_LSB * POWER * 3.2 // Current_LSB = 1/3200 A
+    uint32_t intermediate = power_raw & 0x00FFFFFFU; // Mask to 24 bits
+    if (intermediate & 0x00800000U) intermediate |= 0xFF000000U; // Sign extend if negative
+    int32_t power = (int32_t)intermediate; // Now power is a signed 32-bit integer
 
-     return power_W; // Power in Watts
+    // Conversion is power[W] = (CURRENT_LSB * POWER * 3.2) with Current_LSB = 1/3200 
+    // this gives a factor of 3.2/3200 = 0.001
+    float power_W = (float)(power) * 0.001f; // Convert See Datasheet INA228 (Power[W] = CURRENT_LSB * POWER * 3.2 // Current_LSB = 1/3200 A
+
+    return power_W; // Power in Watts
 }
 
 uint16_t convert_0x042B_to_DieID (uint8_t* data) {
