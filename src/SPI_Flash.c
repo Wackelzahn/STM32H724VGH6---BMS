@@ -33,50 +33,50 @@ flash_status_t mx25l_init(void)
     uint8_t id[3];
     
     // Enable clocks
-    RCC->AHB4ENR |= (1 << 4);    // GPIOE clock
-    RCC->APB2ENR |= (1 << 13);   // SPI4 clock
+    RCC->AHB4ENR |= (1U << 4);    // GPIOE clock
+    RCC->APB2ENR |= (1U << 13);   // SPI4 clock
     
     // Configure GPIO pins
     // PE2 (SCK), PE5 (MISO), PE6 (MOSI) - Alternate Function
-    GPIOE->MODER &= ~((3 << 4) | (3 << 10) | (3 << 12));     // Clear mode bits
-    GPIOE->MODER |= (2 << 4) | (2 << 10) | (2 << 12);        // Alternate function mode
+    GPIOE->MODER &= ~((3U << 4) | (3U << 10) | (3U << 12));     // Clear mode bits
+    GPIOE->MODER |= (2U << 4) | (2U << 10) | (2U << 12);        // Alternate function mode
     
     // PE4 (CS) - GPIO Output
-    GPIOE->MODER &= ~(3 << 8);   // Clear mode bits
-    GPIOE->MODER |= (1 << 8);    // Output mode
+    GPIOE->MODER &= ~(3U << 8);   // Clear mode bits
+    GPIOE->MODER |= (1U << 8);    // Output mode
     
     // Set speed to very high
-    GPIOE->OSPEEDR |= (3 << 4) | (3 << 8) | (3 << 10) | (3 << 12);
+    GPIOE->OSPEEDR |= (3U << 4) | (3U << 8) | (3U << 10) | (3U << 12);
     
     // No pull-up/pull-down for SPI pins, pull-up for CS
-    GPIOE->PUPDR &= ~((3 << 4) | (3 << 8) | (3 << 10) | (3 << 12));
+    GPIOE->PUPDR &= ~((3U << 4) | (3U << 8) | (3U << 10) | (3U << 12));
     GPIOE->PUPDR |= (1 << 8);    // Pull-up for CS
     
     // Set alternate function (AF5 for SPI4)
-    GPIOE->AFR[0] &= ~((0xF << 8) | (0xF << 20) | (0xF << 24));  // Clear AF bits
-    GPIOE->AFR[0] |= (5 << 8) | (5 << 20) | (5 << 24);           // AF5
+    GPIOE->AFR[0] &= ~((0xFU << 8) | (0xFU << 20) | (0xFU << 24));  // Clear AF bits
+    GPIOE->AFR[0] |= (5U << 8) | (5U << 20) | (5U << 24);           // AF5
     
     // Set CS high initially
     CS_HIGH();
     
     // Configure SPI4
     // Disable SPI first
-    SPI4->CR1 &= ~(1 << 0);  // SPE = 0
+    SPI4->CR1 &= ~(1U << 0);  // SPE = 0
     
     // CFG1: Data size = 8 bits, baudrate prescaler = 8
-    SPI4->CFG1 = (7 << 0) |      // DSIZE = 7 (8 bits)
-                (3 << 28);      // MBR = 3 (divide by 16)
+    SPI4->CFG1 = (7U << 0) |      // DSIZE = 7 (8 bits)
+                (3U << 28);      // MBR = 3 (divide by 16)
     
     // CFG2: Master mode, full duplex, MSB first
-    SPI4->CFG2 = (1 << 22) |     // MASTER = 1
+    SPI4->CFG2 = (1U << 22) |     // MASTER = 1
                 (0 << 17) |     // COMM = 0 (full duplex)
                 (0 << 31);      // LSBFRST = 0 (MSB first)
     
     // CR1: Enable SPI
-    SPI4->CR1 = (1 << 0);        // SPE = 1
+    SPI4->CR1 = (1U << 0);        // SPE = 1
     
     // Start communication
-    SPI4->CR1 |= (1 << 9);       // CSTART = 1
+    SPI4->CR1 |= (1U << 9);       // CSTART = 1
     
     delay_us(100);
     
@@ -97,13 +97,13 @@ flash_status_t mx25l_init(void)
 static uint8_t spi_transfer(uint8_t data)
 {
     // Wait for TX buffer empty
-    while(!(SPI4->SR & (1 << 1))); // TXP bit
+    while(!(SPI4->SR & (1U << 1))); // TXP bit
     
     // Send data
     *(volatile uint8_t*)&SPI4->TXDR = data;
     
     // Wait for RX buffer not empty
-    while(!(SPI4->SR & (1 << 0))); // RXP bit
+    while(!(SPI4->SR & (1U << 0))); // RXP bit
     
     // Read received data
     return *(volatile uint8_t*)&SPI4->RXDR;
@@ -250,7 +250,7 @@ flash_status_t mx25l_write_variable(uint32_t address, void *data, uint32_t size)
         if (write_size > remaining)
             write_size = remaining;
         
-        if (mx25l_page_program(current_addr, data_ptr, write_size) != FLASH_OK)
+        if (mx25l_page_program(current_addr, data_ptr, (uint16_t)write_size) != FLASH_OK)
         {
             return FLASH_ERROR;
         }

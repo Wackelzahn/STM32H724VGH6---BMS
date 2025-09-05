@@ -32,6 +32,7 @@
 #include "VEcan.h"
 #include "shunt_can.h"
 #include "conversion.h"
+#include "SPI_Flash.h"
 
 
 
@@ -189,7 +190,23 @@ void enable_fpu(void) {
     __asm volatile ("isb");
 }
 
-
+uint8_t flash_quick_test(void)
+{
+    uint32_t test_data = 0xDEADBEEF;
+    uint32_t read_data = 0;
+    uint32_t test_addr = 0x2000;
+    
+    if (mx25l_init() != FLASH_OK)
+        return 0;
+    
+    if (mx25l_write_variable(test_addr, &test_data, sizeof(test_data)) != FLASH_OK)
+        return 0;
+    
+    if (mx25l_read_variable(test_addr, &read_data, sizeof(read_data)) != FLASH_OK)
+        return 0;
+    
+    return (read_data == test_data) ? 1 : 0;
+}
 
 
 //------------------------------------------------------------
@@ -239,7 +256,11 @@ int main(void) {
   dt = RTC_read_datetime(); // Read current date and time
     seconds = dt.seconds; // get current seconds
     minutes = dt.minutes; // get current minutes
+// flash_quick_test(); // fort testing only
 
+// Quick test function to verify flash is working
+
+  
 
   while (1) {
   //  if (fifo_full_counter > 0) {
