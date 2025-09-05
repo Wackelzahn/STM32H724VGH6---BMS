@@ -260,7 +260,7 @@ int main(void) {
       charge_Ah = charge * 0.0002777777f; // convert charge to Ah
       energy_kWh = energy * 0.0000002777777f; // convert energy to kWh
       
-      update_can_message_356(&threefiftysix, current, bus_voltage, temperature);
+      update_can_message_356(current, bus_voltage, temperature);
 
       VECan_send (); // Send VE CAN messages every 200ms
     }

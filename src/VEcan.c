@@ -200,14 +200,14 @@ void VECan_Init () {
     threefiftyE.T0 = (0x35EU << 18) | (0x0U << 29) | (0x0U << 30); 
     threefiftyE.T1 = 0; // No EFC, no FDF, no BRS, 
     threefiftyE.T1 |= (8U << 16); // DLC = 8 
-    threefiftyE.data[0] = 'C';   
-    threefiftyE.data[1] = '.';   
-    threefiftyE.data[2] = 'E';   
-    threefiftyE.data[3] = '.';   
-    threefiftyE.data[4] = ' ';   
-    threefiftyE.data[5] = 'E';   
-    threefiftyE.data[6] = 'N';   
-    threefiftyE.data[7] = 'G';   
+    threefiftyE.data[0] = 'W';   
+    threefiftyE.data[1] = 'A';   
+    threefiftyE.data[2] = 'C';   
+    threefiftyE.data[3] = 'K';   
+    threefiftyE.data[4] = 'E';   
+    threefiftyE.data[5] = 'L';   
+    threefiftyE.data[6] = 'Z';   
+    threefiftyE.data[7] = 'A';   
 
     // Frame 0x35A Alarms / Warnings
     threefiftyA.T0 = (0x35AU << 18) | (0x0U << 29) | (0x0U << 30); 
@@ -263,37 +263,36 @@ void VECan_Init () {
 
 }
 
-void update_can_message_356(CAN_TxBufferElement* msg_356, 
-                            volatile int32_t current_mA, 
+void update_can_message_356(volatile int32_t current_mA, 
                             volatile int32_t bus_voltage_mV, 
                             volatile int32_t temperature_centidegC) {
     
-    // Setup CAN header for 0x356
-    msg_356->T0 = (0x356U << 18) | (0x0U << 29) | (0x0U << 30); 
-    msg_356->T1 = 0; // No EFC, no FDF, no BRS
-    msg_356->T1 |= (8U << 16); // DLC = 8
+    // Setup CAN header for 0x356 (already done in VECan_Init, but ensure it's correct)
+    threefiftysix.T0 = (0x356U << 18) | (0x0U << 29) | (0x0U << 30); 
+    threefiftysix.T1 = 0; // No EFC, no FDF, no BRS
+    threefiftysix.T1 |= (8U << 16); // DLC = 8
     
-    // Convert voltage from mV to proper format for data[0-1]
-    // Voltage is sent as 16-bit unsigned value in millivolts (little endian)
-    uint16_t voltage_mv = (uint16_t)bus_voltage_mV;
-    msg_356->data[0] = (uint8_t)(voltage_mv & 0xFF);        // LSB
-    msg_356->data[1] = (uint8_t)((voltage_mv >> 8) & 0xFF); // MSB
+    // Convert voltage from mV to centivolts for data[0-1]
+    // Voltage is sent as 16-bit unsigned value in centivolts (scaling 0.01V per unit)
+    uint16_t voltage_cV = (uint16_t)(bus_voltage_mV / 10);
+    threefiftysix.data[0] = (uint8_t)(voltage_cV & 0xFF);        // LSB
+    threefiftysix.data[1] = (uint8_t)((voltage_cV >> 8) & 0xFF); // MSB
     
     // Convert current from mA to deciamps for data[2-3]
     // Current in deciamps = current_mA / 100 (signed 16-bit, little endian)
     int16_t current_dA = (int16_t)(current_mA / 100);
-    msg_356->data[2] = (uint8_t)(current_dA & 0xFF);        // LSB
-    msg_356->data[3] = (uint8_t)((current_dA >> 8) & 0xFF); // MSB
+    threefiftysix.data[2] = (uint8_t)(current_dA & 0xFF);        // LSB
+    threefiftysix.data[3] = (uint8_t)((current_dA >> 8) & 0xFF); // MSB
     
     // Convert temperature from centidegrees to decidegrees for data[4-5]  
     // Temperature in decidegrees = temperature_centidegC / 10 (signed 16-bit, little endian)
     int16_t temperature_dT = (int16_t)(temperature_centidegC / 10);
-    msg_356->data[4] = (uint8_t)(temperature_dT & 0xFF);        // LSB
-    msg_356->data[5] = (uint8_t)((temperature_dT >> 8) & 0xFF); // MSB
+    threefiftysix.data[4] = (uint8_t)(temperature_dT & 0xFF);        // LSB
+    threefiftysix.data[5] = (uint8_t)((temperature_dT >> 8) & 0xFF); // MSB
     
     // Reserved bytes - set to 0
-    msg_356->data[6] = 0x00;
-    msg_356->data[7] = 0x00;
+    threefiftysix.data[6] = 0x00;
+    threefiftysix.data[7] = 0x00;
 }
 
 void VECan_send (void) {
