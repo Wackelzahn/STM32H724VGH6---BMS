@@ -324,6 +324,27 @@ struct fdcan {
 #define FDCAN2_TriggerMemory ((uint32_t *) (FDCAN_MESSAGE_RAM_BASE + FDCAN2_MESSAGE_RAM_BASE_offset + FDCAN_TRIGGER_MEMORY_offset))
 
 
+// Register SPI4 --> checked!
+struct spi {   
+    volatile uint32_t CR1;          // 0x00
+    volatile uint32_t CR2;          // 0x04  
+    volatile uint32_t CFG1;         // 0x08
+    volatile uint32_t CFG2;         // 0x0C
+    volatile uint32_t IER;          // 0x10
+    volatile uint32_t SR;           // 0x14
+    volatile uint32_t IFCR;         // 0x18
+    volatile uint32_t Reserved1;    // 0x1C
+    volatile uint32_t TXDR;         // 0x20
+    volatile uint32_t Reserved2[3]; // 0x24-0x2C
+    volatile uint32_t RXDR;         // 0x30
+    volatile uint32_t Reserved3[3]; // 0x34-0x3C  
+    volatile uint32_t CRCPOLY;      // 0x40
+    volatile uint32_t TXCRC;        // 0x44
+    volatile uint32_t RXCRC;        // 0x48
+    volatile uint32_t UDRDR;        // 0x4C
+};
+#define SPI4 ((struct spi *) 0x40013400) // checked!
+
 
 
 // Register GPIO --> checked!
