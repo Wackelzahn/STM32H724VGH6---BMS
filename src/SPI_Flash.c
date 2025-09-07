@@ -31,30 +31,40 @@ void delay_us(uint32_t us)
 // SPI byte transfer
 uint8_t spi_transfer(uint8_t data)
 {
-    // Set transfer size to 1 byte (required for STM32H7)
-    SPI4->CR2 = 1U;
-    
+
+
+    // Set transfer size to 1 byte in CR2 (TSIZE[15:0])
+    SPI4->CR2 = 1U; // TSIZE = 1 (single byte)
+
+    // Pull NSS low (PE4) to select slave
+    GPIOE->ODR &= ~(1U << 4);
+
+    // Load data into TXDR
+    //*(volatile uint8_t*)&SPI4->TXDR = data;
+    SPI4->TXDR = data;
+SPI4->TXDR = 0x55; // Test write
+SPI4->TXDR = 0xFF; // Test write
+    // Small delay to ensure TXDR is processed
+    //for (volatile uint32_t i = 0; i < 10; i++) __asm volatile ("nop");
+
     // Start the transaction
-    SPI4->CR1 |= (1U << 9);       // CSTART = 1
-    
-    // Wait for TX buffer empty
-    while(!(SPI4->SR & (1U << 1))); // TXP bit
-    
-    // Send data
-    *(volatile uint8_t*)&SPI4->TXDR = data;
-    
-    // Wait for RX buffer not empty
-    while(!(SPI4->SR & (1U << 3))); // EOT bit - CHANGED FROM RXP TO EOT
-    
+    SPI4->CR1 |= (1U << 9); // CSTART = 1
+
+    // Wait for receive data to be available (RXNE, bit 0)
+    while (!(SPI4->SR & (1U << 0)));
+
     // Read received data
     uint8_t received = *(volatile uint8_t*)&SPI4->RXDR;
-    
-    // Wait for end of transfer
-    while(!(SPI4->SR & (1U << 3))); // EOT bit
-    
+
+    // Wait for end of transfer (EOT, bit 3)
+    while (!(SPI4->SR & (1U << 3)));
+
     // Clear the EOT flag
     SPI4->IFCR |= (1U << 3);
-    
+
+    // Pull NSS high (PE4) to deselect slave
+    GPIOE->ODR |= (1U << 4);
+
     return received;
 }
 
@@ -75,58 +85,64 @@ flash_status_t mx25l_init(void)
     // Longer delay to ensure clocks are stable
     delay_us(100U);
     
-// Configure PE2, PE5, PE6 as alternate function (MODER = 10)
-    GPIOE->MODER &= ~((3U << (2 * 2)) | (3U << (2 * 5)) | (3U << (2 * 6)));
-    GPIOE->MODER |= (2U << (2 * 2)) | (2U << (2 * 5)) | (2U << (2 * 6));
-
-    // Configure PE4 as output for software NSS (MODER = 01)
-    GPIOE->MODER &= ~(3U << (2 * 4));
-    GPIOE->MODER |= (1U << (2 * 4));
-
-    // Set alternate function to AF5 for PE2, PE5, PE6 (AFR[0])
-    GPIOE->AFR[0] &= ~((15U << (4 * 2)) | (15U << (4 * 5)) | (15U << (4 * 6)));
-    GPIOE->AFR[0] |= (5U << (4 * 2)) | (5U << (4 * 5)) | (5U << (4 * 6));
-
-    // Set push-pull output type
-    GPIOE->OTYPER &= ~((1U << 2) | (1U << 4) | (1U << 5) | (1U << 6));
-
-    // Set no pull-up/pull-down
-    GPIOE->PUPDR &= ~((3U << (2 * 2)) | (3U << (2 * 4)) | (3U << (2 * 5)) | (3U << (2 * 6)));
-
-    // Set high speed for SPI pins, medium for NSS
-    GPIOE->OSPEEDR &= ~((3U << (2 * 2)) | (3U << (2 * 4)) | (3U << (2 * 5)) | (3U << (2 * 6)));
-    GPIOE->OSPEEDR |= (2U << (2 * 2)) | (1U << (2 * 4)) | (2U << (2 * 5)) | (2U << (2 * 6));
-
-    // Set NSS (PE4) high initially
-    GPIOE->ODR |= (1U << 4);
-
+    // Configure GPIO pins
+    // PE2 (SCK), PE5 (MISO), PE6 (MOSI) - Alternate Function
+    GPIOE->MODER &= ~((3U << 4) | (3U << 10) | (3U << 12));     // Clear mode bits
+    GPIOE->MODER |= (2U << 4) | (2U << 10) | (2U << 12);        // Alternate function mode
     
-
+    // PE4 (CS) - GPIO Output (DO NOT configure as SPI NSS alternate function!)
+    GPIOE->MODER &= ~(3U << 8);   // Clear mode bits
+    GPIOE->MODER |= (1U << 8);    // Output mode
+    
+    // Set speed to very high
+    GPIOE->OSPEEDR |= (3U << 4) | (3U << 8) | (3U << 10) | (3U << 12);
+    
+    // No pull-up/pull-down for SPI pins, pull-up for CS
+    GPIOE->PUPDR &= ~((3U << 4) | (3U << 8) | (3U << 10) | (3U << 12));
+    GPIOE->PUPDR |= (1U << 8);    // Pull-up for CS
+    
+    // Set alternate function (AF5 for SPI4) - ONLY for SCK, MISO, MOSI (NOT CS!)
+    GPIOE->AFR[0] &= ~((0xFU << 8) | (0xFU << 20) | (0xFU << 24));  // Clear AF bits
+    GPIOE->AFR[0] |= (5U << 8) | (5U << 20) | (5U << 24);           // AF5
+    // NOTE: PE4 (CS) is kept as GPIO, NOT configured for AF5!
+    
+    // Set CS HIGH and keep it stable
+    CS_HIGH();
+    
+    // Configure SPI4 - OPTION 2: Aggressive MODF prevention
+    // Make sure SPI is completely disabled first
+    SPI4->CR1 = 0U;  // Clear all bits including SPE
+    SPI4->CR2 = 0U;  // Clear CR2
+    SPI4->CFG1 = 0U; // Clear CFG1
+    SPI4->CFG2 = 0U; // Clear CFG2
+    
 // Configure SPI4 CFG1 (baud rate, data size, FIFO threshold)
-    SPI4->CFG1 = (3U << 28)    // MBR[2:0] = 011 (fPCLK/16)
-                | (0U << 10)    // UDRDET = 0 (no underrun detection)
-                | (0U << 9)     // UDRCFG[1:0] = 00 (default)
-                | (0U << 8)     // FTHLV[2:0] = 000 (1-byte threshold)
-                | (15U << 1);   // DSIZE[4:0] = 01111 (8 bits)
+    SPI4->CFG1 = 0x00000000;    // Clear all bits first
+    SPI4->CFG1 = (3U << 28)     // MBR[2:0] = 011 (fPCLK/16)
+                | (15U);         // DSIZE[4:0] = 01111 (8 bits)
 
-    // Configure SPI4 CFG2 (master mode, Mode 0, disable hardware NSS)
+    // Configure SPI4 CR1 with SSI = 1 for software NSS
+    SPI4->CR1 = (1U << 12);    // SSI = 1 (Internal slave select)
+
+    // Configure SPI4 CFG2 (master mode, Mode 0, enable SSM)
     SPI4->CFG2 = (1U << 22)    // MASTER = 1 (Master mode)
                 | (0U << 25)    // CPOL = 0 (low idle, Mode 0)
                 | (0U << 24)    // CPHA = 0 (first clock, Mode 0)
                 | (0U << 29)    // SSOE = 0 (Disable NSS output)
-                | (0U << 26);   // SSM = 0 (Disable slave select mode)
+                | (1U << 26);   // SSM = 1 (Enable software slave management)
 
- // Clear MODF flag after CFG2 configuration using IFCR
-    SPI4->IFCR = (1U << 9); // Write 1 to MODFC to clear MODF
+    // Clear MODF flag after configuration using IFCR
+    SPI4->IFCR = (1U << 5); // Write 1 to MODFC to clear MODF
 
-    // Configure SPI4 CR1 (basic enable)
-    SPI4->CR1 = 0; // Reset value
+    // Small delay to stabilize configuration
+    for (volatile uint32_t i = 0; i < 100; i++) __asm volatile ("nop");
 
     // Enable SPI4 (SPE = 1)
     SPI4->CR1 |= (1U << 0);
 
     // Clear MODF flag after SPI enable using IFCR
-    SPI4->IFCR = (1U << 9); // Write 1 to MODFC to clear MODF
+    SPI4->IFCR = (1U << 5); // Write 1 to MODFC to clear MODF
+    
     
     delay_us(100U);
     
