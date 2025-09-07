@@ -42,8 +42,8 @@ typedef enum {
 
 // Function prototypes
 flash_status_t mx25l_init(void);
-// static uint8_t spi_transfer(uint8_t data);
-// static void delay_us(uint32_t us);
+uint8_t spi_transfer(uint8_t data);
+void delay_us(uint32_t us);
 flash_status_t mx25l_read_id(uint8_t *id);
 // Enable write operations
 flash_status_t mx25l_write_enable(void);

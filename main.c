@@ -192,21 +192,22 @@ void enable_fpu(void) {
 
 uint8_t flash_quick_test(void)
 {
-    uint32_t test_data = 0xDEADBEEF;
-    uint32_t read_data = 0;
-    uint32_t test_addr = 0x2000;
+    uint32_t test_data = 0xDEADBEEFU;
+    uint32_t read_data = 0U;
+    uint32_t test_addr = 0x2000U;
     
     if (mx25l_init() != FLASH_OK)
-        return 0;
+        return 0U;
     
     if (mx25l_write_variable(test_addr, &test_data, sizeof(test_data)) != FLASH_OK)
-        return 0;
+        return 0U;
     
     if (mx25l_read_variable(test_addr, &read_data, sizeof(read_data)) != FLASH_OK)
-        return 0;
+        return 0U;
     
-    return (read_data == test_data) ? 1 : 0;
+    return (read_data == test_data) ? 1U : 0U;
 }
+
 
 
 //------------------------------------------------------------
@@ -245,6 +246,7 @@ int main(void) {
 
   clock_init();
   gpio_init_PC0();
+
   systick_init();
   // Enable interrupts globally
   __asm("cpsie i");
@@ -256,7 +258,9 @@ int main(void) {
   dt = RTC_read_datetime(); // Read current date and time
     seconds = dt.seconds; // get current seconds
     minutes = dt.minutes; // get current minutes
-// flash_quick_test(); // fort testing only
+//    uint8_t test_byte = spi_transfer(0x55); // test SPI transfer
+//    (void)test_byte; // avoid unused variable warning
+flash_quick_test(); // fort testing only
 
 // Quick test function to verify flash is working
 

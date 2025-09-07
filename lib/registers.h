@@ -335,9 +335,13 @@ struct spi {
     volatile uint32_t IFCR;         // 0x18
     volatile uint32_t Reserved1;    // 0x1C
     volatile uint32_t TXDR;         // 0x20
-    volatile uint32_t Reserved2[3]; // 0x24-0x2C
+    volatile uint32_t Reserved2;    // 0x24
+    volatile uint32_t Reserved3;    // 0x28
+    volatile uint32_t Reserved4;    // 0x2C
     volatile uint32_t RXDR;         // 0x30
-    volatile uint32_t Reserved3[3]; // 0x34-0x3C  
+    volatile uint32_t Reserved5;    // 0x34
+    volatile uint32_t Reserved6;    // 0x38
+    volatile uint32_t Reserved7;    // 0x3C  
     volatile uint32_t CRCPOLY;      // 0x40
     volatile uint32_t TXCRC;        // 0x44
     volatile uint32_t RXCRC;        // 0x48
