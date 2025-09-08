@@ -63,6 +63,7 @@ volatile uint32_t tick = 0;
 bool zonk = false; // for testing only
 uint8_t seconds = 0; // seconds counter
 uint8_t minutes = 0; // minutes counter
+uint8_t REMS[2]; // Flash Command Read Electronic Manufacturer ID & Device ID
 RTC_DateTime dt;
 
 // Debug variables 
@@ -190,23 +191,6 @@ void enable_fpu(void) {
     __asm volatile ("isb");
 }
 
-uint8_t flash_quick_test(void)
-{
-    uint32_t test_data = 0xDEADBEEFU;
-    uint32_t read_data = 0U;
-    uint32_t test_addr = 0x2000U;
-    
-    if (mx25l_init() != FLASH_OK)
-        return 0U;
-    
-    if (mx25l_write_variable(test_addr, &test_data, sizeof(test_data)) != FLASH_OK)
-        return 0U;
-    
-    if (mx25l_read_variable(test_addr, &read_data, sizeof(read_data)) != FLASH_OK)
-        return 0U;
-    
-    return (read_data == test_data) ? 1U : 0U;
-}
 
 
 
@@ -260,8 +244,9 @@ int main(void) {
     minutes = dt.minutes; // get current minutes
 //    uint8_t test_byte = spi_transfer(0x55); // test SPI transfer
 //    (void)test_byte; // avoid unused variable warning
-flash_quick_test(); // fort testing only
-
+    mx25l_init(); // Initialize SPI Flash
+// spi_command_read_3bytes(Flash_ID_Code, test);
+    read_flash_id_sequence(REMS); // Read Flash ID sequence
 // Quick test function to verify flash is working
 
   

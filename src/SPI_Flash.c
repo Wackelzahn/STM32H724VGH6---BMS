@@ -32,29 +32,37 @@ void delay_us(uint32_t us)
 uint8_t spi_transfer(uint8_t data)
 {
 
+        // CRITICAL: Reset TSIZE before each transfer
+    //SPI4->CR1 &= ~(1U << 0);  // Disable SPI
+    //SPI4->CR2 = 1U;           // Set TSIZE = 1
+    //SPI4->CR1 |= (1U << 0);   // Re-enable SPI
 
-    // Set transfer size to 1 byte in CR2 (TSIZE[15:0])
-    SPI4->CR2 = 1U; // TSIZE = 1 (single byte)
 
-    // Pull NSS low (PE4) to select slave
-    GPIOE->ODR &= ~(1U << 4);
+    // Set transfer count to 1 byte in CR2 register
+    // SPI4->CR2 = (SPI4->CR2 & ~0xFFFFU) | 1;
+
+    // Always reset everything before transfer
+    SPI4->CR1 &= ~((1U << 0) | (1 << 9));  // Disable & clear CSTART
+    SPI4->IFCR = 0xFFFFFFFF;                        // Clear all flags
+    SPI4->CR2 = 1;                                  // Reset TSIZE
+    SPI4->CR1 |= (1U << 0);                       // Re-enable
+
+    // Wait until TXE (Transmit buffer empty, bit 1) is set
+    while (!(SPI4->SR & (1U << 1)));
+
 
     // Load data into TXDR
-    //*(volatile uint8_t*)&SPI4->TXDR = data;
-    SPI4->TXDR = data;
-SPI4->TXDR = 0x55; // Test write
-SPI4->TXDR = 0xFF; // Test write
-    // Small delay to ensure TXDR is processed
-    //for (volatile uint32_t i = 0; i < 10; i++) __asm volatile ("nop");
+    *(volatile uint8_t*)&SPI4->TXDR = data;
+ 
 
     // Start the transaction
     SPI4->CR1 |= (1U << 9); // CSTART = 1
 
-    // Wait for receive data to be available (RXNE, bit 0)
-    while (!(SPI4->SR & (1U << 0)));
+    // check for RXP package available
+    while (!(SPI4->SR & (1u << 3)));
 
-    // Read received data
-    uint8_t received = *(volatile uint8_t*)&SPI4->RXDR;
+    //  Use 8-bit read instead of 32-bit
+    uint8_t received_byte = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
 
     // Wait for end of transfer (EOT, bit 3)
     while (!(SPI4->SR & (1U << 3)));
@@ -62,29 +70,25 @@ SPI4->TXDR = 0xFF; // Test write
     // Clear the EOT flag
     SPI4->IFCR |= (1U << 3);
 
-    // Pull NSS high (PE4) to deselect slave
-    GPIOE->ODR |= (1U << 4);
+    // clear TXTFL flag
+    SPI4->IFCR |= (1U << 4);
 
-    return received;
+    // Clear CSTART bit for next transfer
+    SPI4->CR1 &= ~(1U << 9);
+
+    return received_byte;
 }
 
 // Initialize GPIO and SPI4
 flash_status_t mx25l_init(void)
 {
-    uint8_t id[3];
+ 
     
     // Enable clocks
     RCC->AHB4ENR |= (1U << 4);    // GPIOE clock
     RCC->APB2ENR |= (1U << 13);   // SPI4 clock
     
-    // Also ensure SPI4 is taken out of reset (if needed)
-    RCC->APB2RSTR |= (1U << 13);   // Reset SPI4
-    delay_us(1U);
-    RCC->APB2RSTR &= ~(1U << 13);  // Release SPI4 from reset
-    
-    // Longer delay to ensure clocks are stable
-    delay_us(100U);
-    
+  
     // Configure GPIO pins
     // PE2 (SCK), PE5 (MISO), PE6 (MOSI) - Alternate Function
     GPIOE->MODER &= ~((3U << 4) | (3U << 10) | (3U << 12));     // Clear mode bits
@@ -109,211 +113,55 @@ flash_status_t mx25l_init(void)
     // Set CS HIGH and keep it stable
     CS_HIGH();
     
-    // Configure SPI4 - OPTION 2: Aggressive MODF prevention
-    // Make sure SPI is completely disabled first
-    SPI4->CR1 = 0U;  // Clear all bits including SPE
-    SPI4->CR2 = 0U;  // Clear CR2
-    SPI4->CFG1 = 0U; // Clear CFG1
-    SPI4->CFG2 = 0U; // Clear CFG2
+    // Disable SPI4 before configuration
+    SPI4->CR1 &= ~(1U << 0) ; // SPE = 0
     
-// Configure SPI4 CFG1 (baud rate, data size, FIFO threshold)
-    SPI4->CFG1 = 0x00000000;    // Clear all bits first
-    SPI4->CFG1 = (3U << 28)     // MBR[2:0] = 011 (fPCLK/16)
-                | (15U);         // DSIZE[4:0] = 01111 (8 bits)
-
     // Configure SPI4 CR1 with SSI = 1 for software NSS
-    SPI4->CR1 = (1U << 12);    // SSI = 1 (Internal slave select)
+    SPI4->CR1 = 0;              // Clear all bits
+    SPI4->CR1 = (1U << 12);     // SSI = 1 (Internal slave select)
+
+    // Configure SPI4_CFG1
+    SPI4->CFG1 = 0;  // Clear all bits
+    SPI4->CFG1 |= (7U << 0);        // 8-bit data size (7+1=8)
+    SPI4->CFG1 |= (0U << 5);        // FIFO threshold FTHLV: 1 byte
+    SPI4->CFG1 |= (4U << 28);       // Baud rate: PCLK/256
 
     // Configure SPI4 CFG2 (master mode, Mode 0, enable SSM)
-    SPI4->CFG2 = (1U << 22)    // MASTER = 1 (Master mode)
+    SPI4->CFG2 =  (0U << 17)    // COMM = 0 (Full duplex)
+                | (1U << 22)    // MASTER = 1 (Master mode)
                 | (0U << 25)    // CPOL = 0 (low idle, Mode 0)
                 | (0U << 24)    // CPHA = 0 (first clock, Mode 0)
                 | (0U << 29)    // SSOE = 0 (Disable NSS output)
-                | (1U << 26);   // SSM = 1 (Enable software slave management)
+                | (1U << 26)    // SSM = 1 (Enable software slave management)
+                | (1U << 31);   // AFCNTR = 1 (Alternate function control)
 
-    // Clear MODF flag after configuration using IFCR
-    SPI4->IFCR = (1U << 5); // Write 1 to MODFC to clear MODF
+    // Set transfer size to 1 byte in CR2 (TSIZE[15:0])
+    SPI4->CR2 = 1U; // TSIZE = 1 (single byte)
 
-    // Small delay to stabilize configuration
-    for (volatile uint32_t i = 0; i < 100; i++) __asm volatile ("nop");
+    // Clear any pending flags
+    SPI4->IFCR = 0xFFFFFFFF;
 
     // Enable SPI4 (SPE = 1)
     SPI4->CR1 |= (1U << 0);
 
-    // Clear MODF flag after SPI enable using IFCR
-    SPI4->IFCR = (1U << 5); // Write 1 to MODFC to clear MODF
-    
-    
-    delay_us(100U);
-    
-    // Test communication by reading ID
-    if (mx25l_read_id(id) == FLASH_OK)
-    {
-        // Expected ID: 0xC2, 0x20, 0x18
-        if (id[0] == 0xC2U && id[1] == 0x20U && id[2] == 0x18U)
-        {
-            return FLASH_OK;
-        }
-    }
-    
-    return FLASH_ERROR;
-}
-
-// Read Flash ID
-flash_status_t mx25l_read_id(uint8_t *id)
-{
-    CS_LOW();
-    
-    spi_transfer(MX25L_CMD_RDID);
-    id[0] = spi_transfer(0x00U);
-    id[1] = spi_transfer(0x00U);
-    id[2] = spi_transfer(0x00U);
-    
+    // Short delay to stabilize
+    delay_us(10U);
     CS_HIGH();
-    
     return FLASH_OK;
 }
 
-// Enable write operations
-flash_status_t mx25l_write_enable(void)
+// Keep CS low for entire command sequence
+void read_flash_id_sequence(uint8_t* response)
 {
-    CS_LOW();
-    spi_transfer(MX25L_CMD_WREN);
-    CS_HIGH();
+    CS_LOW();  // Keep low for entire sequence
     
-    return FLASH_OK;
-}
+    // Transfer 1: Send command
+    spi_transfer(0x9FU);  // Read Electronic Manufacturer ID & Device ID RDID
+    
+    // Transfers 2-4: Read response
+    response[0] = spi_transfer(0x00);
+    response[1] = spi_transfer(0x00); 
 
-// Read status register
-uint8_t mx25l_read_status(void)
-{
-    uint8_t status;
     
-    CS_LOW();
-    spi_transfer(MX25L_CMD_RDSR);
-    status = spi_transfer(0x00U);
-    CS_HIGH();
-    
-    return status;
-}
-
-// Wait for write operation to complete
-flash_status_t mx25l_wait_ready(void)
-{
-    uint32_t timeout = 1000000U;
-    
-    while ((mx25l_read_status() & MX25L_SR_WIP) && timeout--)
-    {
-        delay_us(1U);
-    }
-    
-    return (timeout > 0U) ? FLASH_OK : FLASH_TIMEOUT;
-}
-
-// Erase a 4KB sector
-flash_status_t mx25l_sector_erase(uint32_t address)
-{
-    if (mx25l_write_enable() != FLASH_OK)
-        return FLASH_ERROR;
-    
-    CS_LOW();
-    spi_transfer(MX25L_CMD_SE);
-    spi_transfer((address >> 16) & 0xFFU);
-    spi_transfer((address >> 8) & 0xFFU);
-    spi_transfer(address & 0xFFU);
-    CS_HIGH();
-    
-    return mx25l_wait_ready();
-}
-
-// Program a page (up to 256 bytes)
-flash_status_t mx25l_page_program(uint32_t address, uint8_t *data, uint16_t size)
-{
-    if (size > MX25L_PAGE_SIZE)
-        size = MX25L_PAGE_SIZE;
-    
-    if (mx25l_write_enable() != FLASH_OK)
-        return FLASH_ERROR;
-    
-    CS_LOW();
-    spi_transfer(MX25L_CMD_PP);
-    spi_transfer((address >> 16) & 0xFFU);
-    spi_transfer((address >> 8) & 0xFFU);
-    spi_transfer(address & 0xFFU);
-    
-    for (uint16_t i = 0U; i < size; i++)
-    {
-        spi_transfer(data[i]);
-    }
-    
-    CS_HIGH();
-    
-    return mx25l_wait_ready();
-}
-
-// Read data from flash
-flash_status_t mx25l_read_data(uint32_t address, uint8_t *buffer, uint32_t size)
-{
-    CS_LOW();
-    spi_transfer(MX25L_CMD_READ);
-    spi_transfer((address >> 16) & 0xFFU);
-    spi_transfer((address >> 8) & 0xFFU);
-    spi_transfer(address & 0xFFU);
-    
-    for (uint32_t i = 0U; i < size; i++)
-    {
-        buffer[i] = spi_transfer(0x00U);
-    }
-    
-    CS_HIGH();
-    
-    return FLASH_OK;
-}
-
-// High-level function to write a variable
-flash_status_t mx25l_write_variable(uint32_t address, void *data, uint32_t size)
-{
-    uint8_t *data_ptr = (uint8_t*)data;
-    uint32_t remaining = size;
-    uint32_t current_addr = address;
-    
-    // Calculate sectors to erase
-    uint32_t start_sector = address / MX25L_SECTOR_SIZE;
-    uint32_t end_sector = (address + size - 1U) / MX25L_SECTOR_SIZE;
-    
-    // Erase required sectors
-    for (uint32_t sector = start_sector; sector <= end_sector; sector++)
-    {
-        if (mx25l_sector_erase(sector * MX25L_SECTOR_SIZE) != FLASH_OK)
-        {
-            return FLASH_ERROR;
-        }
-    }
-    
-    // Write data page by page
-    while (remaining > 0U)
-    {
-        uint32_t page_offset = current_addr % MX25L_PAGE_SIZE;
-        uint32_t write_size = MX25L_PAGE_SIZE - page_offset;
-        
-        if (write_size > remaining)
-            write_size = remaining;
-        
-        if (mx25l_page_program(current_addr, data_ptr, (uint16_t)write_size) != FLASH_OK)
-        {
-            return FLASH_ERROR;
-        }
-        
-        data_ptr += write_size;
-        current_addr += write_size;
-        remaining -= write_size;
-    }
-    
-    return FLASH_OK;
-}
-
-// High-level function to read a variable
-flash_status_t mx25l_read_variable(uint32_t address, void *buffer, uint32_t size)
-{
-    return mx25l_read_data(address, (uint8_t*)buffer, size);
+    CS_HIGH(); // Only raise CS at the end
 }

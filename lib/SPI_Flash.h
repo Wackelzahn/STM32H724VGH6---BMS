@@ -44,15 +44,5 @@ typedef enum {
 flash_status_t mx25l_init(void);
 uint8_t spi_transfer(uint8_t data);
 void delay_us(uint32_t us);
-flash_status_t mx25l_read_id(uint8_t *id);
-// Enable write operations
-flash_status_t mx25l_write_enable(void);
-uint8_t mx25l_read_status(void);
-flash_status_t mx25l_wait_ready(void);
-flash_status_t mx25l_sector_erase(uint32_t address);
-flash_status_t mx25l_page_program(uint32_t address, uint8_t *data, uint16_t size);
-flash_status_t mx25l_read_data(uint32_t address, uint8_t *buffer, uint32_t size);
-flash_status_t mx25l_write_variable(uint32_t address, void *data, uint32_t size);
-flash_status_t mx25l_read_variable(uint32_t address, void *buffer, uint32_t size);
-
+void read_flash_id_sequence(uint8_t* response);
 #endif
