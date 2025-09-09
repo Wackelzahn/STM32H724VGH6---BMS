@@ -18,6 +18,13 @@
 
 
 
+// Global variables for interrupt-driven operations
+// Private variables (keep these static)
+static volatile bool flash_operation_complete = true;
+static volatile flash_operation_t flash_operation_type = FLASH_OP_NONE;
+
+
+
 
 // Simple delay function
 void delay_us(uint32_t us)
@@ -28,62 +35,35 @@ void delay_us(uint32_t us)
     while(count--);
 }
 
-// SPI byte transfer
-uint8_t spi_transfer(uint8_t data)
+// Public accessor functions
+bool is_flash_operation_complete(void)
 {
-
-        // CRITICAL: Reset TSIZE before each transfer
-    //SPI4->CR1 &= ~(1U << 0);  // Disable SPI
-    //SPI4->CR2 = 1U;           // Set TSIZE = 1
-    //SPI4->CR1 |= (1U << 0);   // Re-enable SPI
-
-
-    // Set transfer count to 1 byte in CR2 register
-    // SPI4->CR2 = (SPI4->CR2 & ~0xFFFFU) | 1;
-
-    // Always reset everything before transfer
-    SPI4->CR1 &= ~((1U << 0) | (1 << 9));  // Disable & clear CSTART
-    SPI4->IFCR = 0xFFFFFFFF;                        // Clear all flags
-    SPI4->CR2 = 1;                                  // Reset TSIZE
-    SPI4->CR1 |= (1U << 0);                       // Re-enable
-
-    // Wait until TXE (Transmit buffer empty, bit 1) is set
-    while (!(SPI4->SR & (1U << 1)));
-
-
-    // Load data into TXDR
-    *(volatile uint8_t*)&SPI4->TXDR = data;
- 
-
-    // Start the transaction
-    SPI4->CR1 |= (1U << 9); // CSTART = 1
-
-    // check for RXP package available
-    while (!(SPI4->SR & (1u << 3)));
-
-    //  Use 8-bit read instead of 32-bit
-    uint8_t received_byte = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
-
-    // Wait for end of transfer (EOT, bit 3)
-    while (!(SPI4->SR & (1U << 3)));
-
-    // Clear the EOT flag
-    SPI4->IFCR |= (1U << 3);
-
-    // clear TXTFL flag
-    SPI4->IFCR |= (1U << 4);
-
-    // Clear CSTART bit for next transfer
-    SPI4->CR1 &= ~(1U << 9);
-
-    return received_byte;
+    return flash_operation_complete;
 }
 
-// Initialize GPIO and SPI4
+flash_operation_t get_flash_operation_type(void)
+{
+    return flash_operation_type;
+}
+
+void set_flash_operation_complete(bool complete)
+{
+    flash_operation_complete = complete;
+}
+
+void set_flash_operation_type(flash_operation_t type)
+{
+    flash_operation_type = type;
+}
+
+
+// Initialize SPI4 in master mode, this function configures:
+// PE2: SPI4_SCK  (AF5),PE5: SPI4_MISO (AF5), PE6: SPI4_MOSI (AF5), PE4: SPI4_NSS  (AF5) - but managed by software
+// SPI Configuration:
+// Master mode, 8-bit data frame, Software SS management (SSM=1, SSI=1),
+// Clock polarity and phase: Mode 0 (CPOL=0, CPHA=0), MSB first, Baud rate: PCLK/256 (adjust as needed)
 flash_status_t mx25l_init(void)
 {
- 
-    
     // Enable clocks
     RCC->AHB4ENR |= (1U << 4);    // GPIOE clock
     RCC->APB2ENR |= (1U << 13);   // SPI4 clock
@@ -141,6 +121,19 @@ flash_status_t mx25l_init(void)
     // Clear any pending flags
     SPI4->IFCR = 0xFFFFFFFF;
 
+    // Enable interrupt
+    __asm volatile ("cpsie i" ::: "memory"); // Enable global interrupts if not already done
+    SPI4->IER |= (1U << 3);  // EOTIE = 1 Enable SPI4 peripheral interrupts
+    
+    // 4. Set NVIC priority for SPI4 (IRQ 84)
+    uint32_t priority_reg_index = 84 / 4;        // = 21  IRQ 84 -> IPR[21], byte 0 (84/4 = 21, 84%4 = 0)
+    uint32_t priority_byte_offset = (84 % 4) * 8; // = 0
+    NVIC->IPR[priority_reg_index] = (NVIC->IPR[priority_reg_index] & ~(0xFFU << priority_byte_offset)) | 
+                                    ((2U << 4) << priority_byte_offset);
+    
+    NVIC->ICPR[2] |= (1U << 20);  // Clear pending bit (84 -> ICPR[2] bit 20)
+    NVIC->ISER[2] |= (1U << 20);  // Enable IRQ 84 (84 -> ISER[2] bit 20) in NVIC
+
     // Enable SPI4 (SPE = 1)
     SPI4->CR1 |= (1U << 0);
 
@@ -151,17 +144,63 @@ flash_status_t mx25l_init(void)
 }
 
 // Keep CS low for entire command sequence
-void read_flash_id_sequence(uint8_t* response)
+void read_flash_id_sequence(void)
 {
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_READ_ID;
     CS_LOW();  // Keep low for entire sequence
     
-    // Transfer 1: Send command
-    spi_transfer(0x9FU);  // Read Electronic Manufacturer ID & Device ID RDID
-    
-    // Transfers 2-4: Read response
-    response[0] = spi_transfer(0x00);
-    response[1] = spi_transfer(0x00); 
+    // Always reset everything before transfer
+    SPI4->CR1 &= ~((1U << 0) | (1 << 9));  // Disable & clear CSTART
+    SPI4->IFCR = 0xFFFFFFFF;               // Clear all flags
+    SPI4->CR2 = 4;                         // Set TSIZE
+    SPI4->CR1 |= (1U << 0);                // Re-enable
 
+    // Wait until TXE (Transmit buffer empty, bit 1) is set
+    while (!(SPI4->SR & (1U << 1)));
+
+    // Load data into TXDR
+    *(volatile uint8_t*)&SPI4->TXDR = 0x9F; // RDID command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00; // Dummy byte
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00; // Dummy byte
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00; // Dummy byte
+ 
+    // Start the transaction
+    SPI4->CR1 |= (1U << 9); // CSTART = 1
+
+}
+
+// Read one word (4 bytes) from flash - simplified version
+flash_status_t flash_read_word(uint32_t address)
+{
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_READ_DATA;
+
+    CS_LOW();
     
-    CS_HIGH(); // Only raise CS at the end
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 8;  // Command + 3 address bytes + 4 data bytes
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send read command and address
+    *(volatile uint8_t*)&SPI4->TXDR = 0x03U;                    // READ command;
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 16) & 0xFF;   // 24bit adress
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 8) & 0xFF;
+    *(volatile uint8_t*)&SPI4->TXDR = address & 0xFF;
+    
+    // Send 4 dummy bytes to clock out the word
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+    return FLASH_OK;
 }

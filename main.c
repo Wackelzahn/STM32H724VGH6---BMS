@@ -65,6 +65,8 @@ uint8_t seconds = 0; // seconds counter
 uint8_t minutes = 0; // minutes counter
 uint8_t REMS[2]; // Flash Command Read Electronic Manufacturer ID & Device ID
 RTC_DateTime dt;
+flash_id_t RDID;    // Identification = manufacturer ID + device ID
+uint32_t flash_read_buffer = 0; // buffer for flash read data
 
 // Debug variables 
 volatile int32_t current = 0;
@@ -242,13 +244,15 @@ int main(void) {
   dt = RTC_read_datetime(); // Read current date and time
     seconds = dt.seconds; // get current seconds
     minutes = dt.minutes; // get current minutes
-//    uint8_t test_byte = spi_transfer(0x55); // test SPI transfer
-//    (void)test_byte; // avoid unused variable warning
+
     mx25l_init(); // Initialize SPI Flash
 // spi_command_read_3bytes(Flash_ID_Code, test);
-    read_flash_id_sequence(REMS); // Read Flash ID sequence
-// Quick test function to verify flash is working
+  // read_flash_id_bitvar = 1; // set flag to read flash ID in main loop    
+  // read_flash_id_sequence(); // Read Flash ID sequence
+  // read_flash_id_bitvar = 1; // set flag to read flash ID in main loop    
+  // read_flash_id_sequence(); // Read Flash ID sequence
 
+  set_flash_operation_complete(true); // set flag to indicate flash operation is complete
   
 
   while (1) {
@@ -273,9 +277,13 @@ int main(void) {
       update_can_message_356(current, bus_voltage, temperature);
 
       VECan_send (); // Send VE CAN messages every 200ms
-    }
-
-}
+        if (is_flash_operation_complete())  {
+          // read_flash_id_sequence(); // Read Flash ID sequence
+        flash_read_word(0x1000U); // Read one word from flash
+          
+        }
+      }
+  }
 }
 
 //------------------------------------------------------------
@@ -407,3 +415,52 @@ void FDCAN1_IT0_IRQHandler(void) {
 }
 
 
+
+// SPI4 interrupt receive handler
+void SPI4_IRQHandler(void) {
+  // check for EOT
+  if ((SPI4->SR & (1U << 3))) {
+    switch(get_flash_operation_type()) {
+      
+      case FLASH_OP_READ_ID:
+        {
+          // Read received byte from RXDR
+          RDID.trash = *(volatile uint8_t*)&SPI4->RXDR;       // 8-bit read
+          RDID.manufacturer_id = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          RDID.device_id1 = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          RDID.device_id2 = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+        }
+          break;
+
+      case FLASH_OP_READ_DATA:
+        {
+          // Read data sequence
+          uint8_t trash = 0;
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Command byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          (void)trash; // avoid unused variable warning
+          flash_read_buffer = 0;
+          flash_read_buffer |= ((uint32_t)(*(volatile uint8_t*)&SPI4->RXDR) << 24); // Data byte
+          flash_read_buffer |= ((uint32_t)(*(volatile uint8_t*)&SPI4->RXDR) << 16); // Data byte
+          flash_read_buffer |= ((uint32_t)(*(volatile uint8_t*)&SPI4->RXDR) << 8);  // Data byte
+          flash_read_buffer |= ((uint32_t)(*(volatile uint8_t*)&SPI4->RXDR) << 0);  // Data byte
+        }
+        break;
+     
+        default:
+        // Unknown operation
+        break;
+    }
+    
+    set_flash_operation_complete(true);
+    set_flash_operation_type(FLASH_OP_NONE);
+   
+    // Housekeeping
+    SPI4->IFCR |= (1U << 3);  // Clear the EOT flag
+    SPI4->IFCR |= (1U << 4);  // Clear TXTFL flag
+    SPI4->CR1 &= ~(1U << 9);  // Clear CSTART bit for next transfer
+    CS_HIGH();                // Only raise CS at the end
+  }
+}
