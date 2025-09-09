@@ -271,19 +271,20 @@ int main(void) {
       update_can_message_356(current, bus_voltage, temperature);
 
       VECan_send (); // Send VE CAN messages every 200ms
-        while (!is_flash_operation_complete());
-        flash_read_word(0x1000U);       // Read one word from flash 
-        while (!is_flash_operation_complete()); // after read operation is complete 
-        return_data_word(&flash_word);  // get the read data
-        read_flash_id_sequence();       // Read Flash ID sequence 
-        while (!is_flash_operation_complete());// after read operation is complete 
-        return_data_word(&flash_id);    // get the read data
-        flash_read_status();            // Read Flash status register
-        while (!is_flash_operation_complete());// after read operation is complete
-        return_data_word(&flash_status); // get the read data
-        }
-      }
+        
+      while (!is_flash_operation_complete());
+      flash_read_word(0x1000U);       // Read one word from flash 
+      while (!is_flash_operation_complete()); // after read operation is complete 
+      return_data_word(&flash_word);  // get the read data
+      read_flash_id_sequence();       // Read Flash ID sequence 
+      while (!is_flash_operation_complete());// after read operation is complete 
+      return_data_word(&flash_id);    // get the read data
+      flash_read_status();            // Read Flash status register
+      while (!is_flash_operation_complete());// after read operation is complete
+      return_data_word(&flash_status); // get the read data
+    }
   }
+}
 
 
 //------------------------------------------------------------
