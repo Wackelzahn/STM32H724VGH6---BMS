@@ -277,14 +277,16 @@ int main(void) {
       update_can_message_356(current, bus_voltage, temperature);
 
       VECan_send (); // Send VE CAN messages every 200ms
-        if (is_flash_operation_complete())  {
-          // read_flash_id_sequence(); // Read Flash ID sequence
-        flash_read_word(0x1000U); // Read one word from flash
-          
+        while (!is_flash_operation_complete());
+        flash_read_word(0x1000U); // Read one word from flash 
+        while (!is_flash_operation_complete()); // after read operation is complete --> stored in flash_read_buffer
+        read_flash_id_sequence(); // Read Flash ID sequence 
+        while (!is_flash_operation_complete());// after read operation is complete --> stored in RDID variable
+       
         }
       }
   }
-}
+
 
 //------------------------------------------------------------
 // Interrupt Handlers

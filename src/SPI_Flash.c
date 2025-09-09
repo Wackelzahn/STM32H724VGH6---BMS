@@ -204,3 +204,4 @@ flash_status_t flash_read_word(uint32_t address)
     
     return FLASH_OK;
 }
+
