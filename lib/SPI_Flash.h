@@ -56,17 +56,18 @@ typedef struct {
 
 // Function prototypes
 
-bool is_flash_operation_complete(void);
-
-flash_status_t mx25l_init(void);
-uint8_t spi_transfer(uint8_t data);
 void delay_us(uint32_t us);
-void read_flash_id_sequence(void);
-flash_status_t flash_read_word(uint32_t address);
-
+bool is_flash_operation_complete(void);
 void return_data_word(uint32_t* data_buffer);
-
-flash_status_t flash_read_status(void);
+flash_status_t mx25l_init(void);
+void read_flash_id_sequence(void);
+// flash_status_t flash_read_word(uint32_t address);
+flash_status_t flash_wait_ready(void);
+flash_status_t flash_erase_sector(uint32_t address);
+flash_status_t flash_read_status(uint8_t* status);
+flash_status_t flash_write_enable(void);
+flash_status_t flash_write_page(uint32_t address, const uint8_t* data, uint16_t length);
+flash_status_t flash_read_word(uint32_t address);
 
 void SPI4_IRQHandler(void);
 

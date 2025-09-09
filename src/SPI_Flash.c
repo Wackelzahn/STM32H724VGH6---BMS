@@ -34,7 +34,7 @@ typedef enum {
 static volatile bool flash_operation_complete = true;
 static volatile flash_operation_t flash_operation_type = FLASH_OP_NONE;
 static volatile uint8_t flash_read_buffer[8];  // Buffer for read operations
-
+static volatile uint8_t flash_status_reg = 0;
 
 
 // Simple delay function
@@ -176,6 +176,181 @@ void read_flash_id_sequence(void)
 
 }
 
+
+// Wait for flash operation to complete
+flash_status_t flash_wait_ready(void)
+{
+    uint8_t status = 0;
+    volatile uint32_t timeout = 1000000;  // Large timeout for erase operations
+    
+    do {
+        if ((flash_read_status(&status)) != FLASH_OK) {
+            return FLASH_ERROR;
+        }
+        timeout--;
+    } while ((status & 0x01U) && timeout > 0);  // Wait until WIP bit is cleared (Write In Progress)
+    
+    return (timeout > 0) ? FLASH_OK : FLASH_ERROR;
+}
+
+// Erase a 4KB sector
+// @param address Any address within the sector to erase
+flash_status_t flash_erase_sector(uint32_t address)
+{
+    // Enable write
+    if (flash_write_enable() != FLASH_OK) return FLASH_ERROR;
+    
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_SECTOR_ERASE;
+    
+    CS_LOW();
+    
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 4;  // Command + 3 address bytes
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send sector erase command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x20U; // Sector Erase command
+    
+    // Send 24-bit address (MSB first)
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 16) & 0xFF;
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 8) & 0xFF;
+    *(volatile uint8_t*)&SPI4->TXDR = address & 0xFF;
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+    // Wait for completion
+    volatile uint32_t timeout = 100000;
+    while (!flash_operation_complete && timeout--);
+    
+    if (timeout == 0) return FLASH_ERROR;
+    
+    // Wait for erase to complete (can take several hundred ms)
+    return flash_wait_ready();
+}
+
+// Read flash status register
+flash_status_t flash_read_status(uint8_t* status)
+{
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_READ_STATUS;
+    
+    CS_LOW();
+    
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 2;  // Command + 1 status byte
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send read status command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x05;  // FLASH_CMD_RDSR Read Status Register
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;  // Dummy byte
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+    // Wait for completion
+    volatile uint32_t timeout = 100000;
+    while (!flash_operation_complete && timeout--);
+    
+    if (timeout > 0) {
+        *status = flash_status_reg;
+        return FLASH_OK;
+    }
+    return FLASH_ERROR;
+}
+
+// Send write enable command
+flash_status_t flash_write_enable(void)
+{
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_WRITE_ENABLE;
+    
+    CS_LOW();
+    
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 1;  // 1 byte transfer
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send write enable command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x06; // FLASH_CMD_WREN Write Enable
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+    // Wait for completion
+    volatile uint32_t timeout = 100000;
+    while (!flash_operation_complete && timeout--);
+    
+    return (timeout > 0) ? FLASH_OK : FLASH_ERROR;
+}
+
+// @param address 24-bit address to write to
+// @param data Pointer to data buffer
+// @param length Number of bytes to write (max 256 bytes per page)
+flash_status_t flash_write_page(uint32_t address, const uint8_t* data, uint16_t length)
+{
+    if (length > 256) return FLASH_ERROR;  // Page size limit
+    
+    // Enable write
+    if (flash_write_enable() != FLASH_OK) return FLASH_ERROR;
+    
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_PAGE_PROGRAM;
+    
+    CS_LOW();
+    
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 4 + length;  // Command + 3 address bytes + data
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send page program command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x02U; // PAGE PROGRAM command
+    
+    // Send 24-bit address (MSB first)
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 16) & 0xFF;
+    *(volatile uint8_t*)&SPI4->TXDR = (address >> 8) & 0xFF;
+    *(volatile uint8_t*)&SPI4->TXDR = address & 0xFF;
+    
+    // Send data bytes
+    for (uint16_t i = 0; i < length; i++) {
+        while (!(SPI4->SR & (1U << 1)));  // Wait for TXP
+        *(volatile uint8_t*)&SPI4->TXDR = data[i];
+    }
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+    // Wait for completion
+    volatile uint32_t timeout = 100000;
+    while (!flash_operation_complete && timeout--);
+    
+    if (timeout == 0) return FLASH_ERROR;
+    
+    // Wait for programming to complete
+    return flash_wait_ready();
+}
+
 // Read one word (4 bytes) from flash - simplified version
 flash_status_t flash_read_word(uint32_t address)
 {
@@ -209,35 +384,6 @@ flash_status_t flash_read_word(uint32_t address)
     SPI4->CR1 |= (1U << 9);
     
     return FLASH_OK;
-}
-
-
-// Read flash status register
-flash_status_t flash_read_status(void)
-{
-    flash_operation_complete = false;
-    flash_operation_type = FLASH_OP_READ_STATUS;
-    
-    CS_LOW();
-    
-    // Reset SPI state
-    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
-    SPI4->IFCR = 0xFFFFFFFF;
-    SPI4->CR2 = 2;  // Command + 1 status byte
-    SPI4->CR1 |= (1U << 0);
-    
-    // Wait for TXP
-    while (!(SPI4->SR & (1U << 1)));
-    
-    // Send read status command
-    *(volatile uint8_t*)&SPI4->TXDR = 0x05;  //FLASH_CMD_RDSR
-    *(volatile uint8_t*)&SPI4->TXDR = 0x00;  // Dummy byte
-    
-    // Start transfer
-    SPI4->CR1 |= (1U << 9);
-    
-
-    return FLASH_ERROR;
 }
 
 
@@ -290,7 +436,15 @@ void SPI4_IRQHandler(void) {
           flash_read_buffer[4] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
         }
         break;
-     
+        
+        case FLASH_OP_WRITE_ENABLE:
+        case FLASH_OP_SECTOR_ERASE:
+        // No data to read back
+          while (SPI4->SR & (1U << 0)) {  // While RXP is set
+                    *(volatile uint8_t*)&SPI4->RXDR;
+                }
+        break;
+        
         default:
         // Unknown operation
         break;
