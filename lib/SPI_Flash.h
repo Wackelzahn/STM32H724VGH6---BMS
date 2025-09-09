@@ -34,15 +34,7 @@
 #define CS_HIGH()   (GPIOE->BSRR = (1 << 4))         // Set PE4
 
 
-typedef enum {
-    FLASH_OP_NONE,
-    FLASH_OP_WRITE_ENABLE,
-    FLASH_OP_READ_STATUS,
-    FLASH_OP_PAGE_PROGRAM,
-    FLASH_OP_READ_DATA,
-    FLASH_OP_SECTOR_ERASE,
-    FLASH_OP_READ_ID
-} flash_operation_t;
+
 
 
 typedef enum {
@@ -63,9 +55,7 @@ typedef struct {
 
 
 // Function prototypes
-flash_operation_t get_flash_operation_type(void);
-void set_flash_operation_complete(bool complete);
-void set_flash_operation_type(flash_operation_t type);
+
 bool is_flash_operation_complete(void);
 
 flash_status_t mx25l_init(void);
@@ -73,5 +63,11 @@ uint8_t spi_transfer(uint8_t data);
 void delay_us(uint32_t us);
 void read_flash_id_sequence(void);
 flash_status_t flash_read_word(uint32_t address);
+
+void return_data_word(uint32_t* data_buffer);
+
+flash_status_t flash_read_status(void);
+
+void SPI4_IRQHandler(void);
 
 #endif

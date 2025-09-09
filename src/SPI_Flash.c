@@ -20,9 +20,20 @@
 
 // Global variables for interrupt-driven operations
 // Private variables (keep these static)
+
+typedef enum {
+    FLASH_OP_NONE,
+    FLASH_OP_WRITE_ENABLE,
+    FLASH_OP_READ_STATUS,
+    FLASH_OP_PAGE_PROGRAM,
+    FLASH_OP_READ_DATA,
+    FLASH_OP_SECTOR_ERASE,
+    FLASH_OP_READ_ID
+} flash_operation_t;
+
 static volatile bool flash_operation_complete = true;
 static volatile flash_operation_t flash_operation_type = FLASH_OP_NONE;
-
+static volatile uint8_t flash_read_buffer[8];  // Buffer for read operations
 
 
 
@@ -41,19 +52,14 @@ bool is_flash_operation_complete(void)
     return flash_operation_complete;
 }
 
-flash_operation_t get_flash_operation_type(void)
+void return_data_word(uint32_t* data_buffer)
 {
-    return flash_operation_type;
-}
-
-void set_flash_operation_complete(bool complete)
-{
-    flash_operation_complete = complete;
-}
-
-void set_flash_operation_type(flash_operation_t type)
-{
-    flash_operation_type = type;
+    if (data_buffer != NULL) {
+        *data_buffer = ((uint32_t)flash_read_buffer[1] << 24) |
+                       ((uint32_t)flash_read_buffer[2] << 16) |
+                       ((uint32_t)flash_read_buffer[3] << 8)  |
+                       ((uint32_t)flash_read_buffer[4] << 0);
+    }
 }
 
 
@@ -203,5 +209,101 @@ flash_status_t flash_read_word(uint32_t address)
     SPI4->CR1 |= (1U << 9);
     
     return FLASH_OK;
+}
+
+
+// Read flash status register
+flash_status_t flash_read_status(void)
+{
+    flash_operation_complete = false;
+    flash_operation_type = FLASH_OP_READ_STATUS;
+    
+    CS_LOW();
+    
+    // Reset SPI state
+    SPI4->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI4->IFCR = 0xFFFFFFFF;
+    SPI4->CR2 = 2;  // Command + 1 status byte
+    SPI4->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI4->SR & (1U << 1)));
+    
+    // Send read status command
+    *(volatile uint8_t*)&SPI4->TXDR = 0x05;  //FLASH_CMD_RDSR
+    *(volatile uint8_t*)&SPI4->TXDR = 0x00;  // Dummy byte
+    
+    // Start transfer
+    SPI4->CR1 |= (1U << 9);
+    
+
+    return FLASH_ERROR;
+}
+
+
+
+// --------------------------------------------------------------------------------------------------
+// Interrupt handler
+// SPI4 interrupt receive handler
+//---------------------------------------------------------------------------------------------------
+
+void SPI4_IRQHandler(void) {
+  // check for EOT
+  if ((SPI4->SR & (1U << 3))) {
+    switch(flash_operation_type) {
+      
+      case FLASH_OP_READ_STATUS:
+        {
+          // Read received byte from RXDR
+          flash_read_buffer[0] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read -> trash
+          flash_read_buffer[1] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          flash_read_buffer[2] = 0;
+          flash_read_buffer[3] = 0;
+          flash_read_buffer[4] = 0;
+        }
+        break;
+      
+      case FLASH_OP_READ_ID:
+        {
+          // Read received byte from RXDR
+          flash_read_buffer[0] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read -> trash
+          flash_read_buffer[1] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          flash_read_buffer[2] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          flash_read_buffer[3] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          flash_read_buffer[4] = 0;
+        }
+          break;
+
+      case FLASH_OP_READ_DATA:
+        {
+          // Read data sequence
+          uint8_t trash = 0;
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Command byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          (void)trash; // avoid unused variable warning
+          flash_read_buffer[0] = 0;
+          flash_read_buffer[1] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[2] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[3] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[4] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+        }
+        break;
+     
+        default:
+        // Unknown operation
+        break;
+    }
+    
+    flash_operation_complete = true; 
+    flash_operation_type = FLASH_OP_NONE;
+   
+    // Housekeeping
+    SPI4->IFCR |= (1U << 3);  // Clear the EOT flag
+    SPI4->IFCR |= (1U << 4);  // Clear TXTFL flag
+    SPI4->CR1 &= ~(1U << 9);  // Clear CSTART bit for next transfer
+    CS_HIGH();                // Only raise CS at the end
+  }
 }
 
