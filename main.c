@@ -290,14 +290,14 @@ test_buffer[3] = 0x33U; // for testing only
       while (!is_flash_operation_complete()); // after read operation is complete 
       return_data_word(flash_byte);  // get the read data
       
-      kazonk = (flash_erase_sector(0x1000U)); // Erase sector at address 0x1000
+      // kazonk = (flash_erase_sector(0x1000U)); // Erase sector at address 0x1000
       // wait internally until erase operation is complete
 
       kazonk = flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
       while (!is_flash_operation_complete()); // after read operation is complete 
       return_data_word(flash_byte);  // get the read data
 
-      kazonk = flash_write_page(0x1000U, test_buffer, 4); // Write 2 bytes to flash at address 0x1000
+      // kazonk = flash_write_page(0x1000U, test_buffer, 4); // Write 2 bytes to flash at address 0x1000
       // wait internally until write operation is complete
       
       kazonk = flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
