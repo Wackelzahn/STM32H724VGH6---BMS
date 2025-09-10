@@ -54,14 +54,32 @@ typedef struct {
 } flash_id_t;
 
 
+
+
+
 // Function prototypes
+// --------------------------------------
+// How to use the functions in main:
+// 1. Operations That MUST Wait Internally
+// Keep internal waiting for operations that need to poll the flash status register:
+// flash_write_page() - needs to wait for WIP bit
+// flash_erase_sector() - needs to wait for WIP bit
+// flash_wait_ready() - by definition
+// --------------------------------------
+// 2. Operations That Do NOT Wait Internally
+// they must be checked externally for completion:
+// while (!is_flash_operation_complete()); // after read operation is complete 
+// flash_read_word() - read operation, must check completion externally
+// read_flash_id_sequence() - must check completion externally
+// flash_read_status() - must check completion externally
+// flash_write_enable() - must check completion externally
+// --------------------------------------
 
 void delay_us(uint32_t us);
 bool is_flash_operation_complete(void);
 void return_data_word(uint8_t* data_buffer);
 flash_status_t mx25l_init(void);
 flash_status_t read_flash_id_sequence(void);
-// flash_status_t flash_read_word(uint32_t address);
 flash_status_t flash_wait_ready(void);
 flash_status_t flash_erase_sector(uint32_t address);
 flash_status_t flash_read_status(uint8_t* status);
