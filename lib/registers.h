@@ -348,6 +348,7 @@ struct spi {
     volatile uint32_t UDRDR;        // 0x4C
 };
 #define SPI4 ((struct spi *) 0x40013400) // checked!
+#define SPI3 ((struct spi *) 0x40003C00) // checked!
 
 
 
