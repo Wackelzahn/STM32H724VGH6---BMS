@@ -65,8 +65,8 @@ uint8_t seconds = 0; // seconds counter
 uint8_t minutes = 0; // minutes counter
 // uint8_t REMS[2]; // Flash Command Read Electronic Manufacturer ID & Device ID
 RTC_DateTime dt;
-uint32_t flash_word = 0; // buffer for flash read data
-uint32_t flash_id = 0; // buffer for flash ID data
+uint8_t flash_byte[4]; // buffer for flash read data
+uint8_t flash_id[4]; // buffer for flash ID data
 uint32_t flash_status = 0; // buffer for flash status data
 
 // Debug variables 
@@ -84,7 +84,7 @@ volatile float energy_kWh = 0; // energy in kWh
 
 volatile uint32_t temp[16]; // for testing only
 uint8_t test_buffer[4]; // for testing only
-
+flash_status_t kazonk; // for testing only
 
 
 //------------------------------------------------------------
@@ -280,26 +280,29 @@ test_buffer[3] = 0x33U; // for testing only
 
       VECan_send (); // Send VE CAN messages every 200ms
         
-      while (!is_flash_operation_complete());
-      flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
-      while (!is_flash_operation_complete()); // after read operation is complete 
-      return_data_word(&flash_word);  // get the read data
+      //while (!is_flash_operation_complete());
+
       read_flash_id_sequence();       // Read Flash ID sequence 
       while (!is_flash_operation_complete()); // after read operation is complete 
-      return_data_word(&flash_id);    // get the read data
-      flash_erase_sector(0x1000U); // Erase sector at address 0x1000
-      while (!is_flash_operation_complete()); // after erase operation is complete
+      return_data_word(flash_id);    // get the read data
+      
       flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
       while (!is_flash_operation_complete()); // after read operation is complete 
-      return_data_word(&flash_word);  // get the read data
-      read_flash_id_sequence();       // Read Flash ID sequence 
-      while (!is_flash_operation_complete()); // after erase operation is complete
-      return_data_word(&flash_id);    // get the read data
-      flash_write_page(0x1000U, test_buffer, 4); // Write 2 bytes to flash at address 0x1000
-      while (!is_flash_operation_complete()); // after write operation is complete
-      flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
+      return_data_word(flash_byte);  // get the read data
+      
+      kazonk = (flash_erase_sector(0x1000U)); // Erase sector at address 0x1000
+      // wait internally until erase operation is complete
+
+      kazonk = flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
       while (!is_flash_operation_complete()); // after read operation is complete 
-      return_data_word(&flash_word);  // get the read data
+      return_data_word(flash_byte);  // get the read data
+
+      kazonk = flash_write_page(0x1000U, test_buffer, 4); // Write 2 bytes to flash at address 0x1000
+      // wait internally until write operation is complete
+      
+      kazonk = flash_read_word(0x1000U);       // Read one page (256 byte) from flash 
+      while (!is_flash_operation_complete()); // after read operation is complete 
+      return_data_word(flash_byte);  // get the read data
     }
   }
 }

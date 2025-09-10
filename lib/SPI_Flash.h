@@ -58,9 +58,9 @@ typedef struct {
 
 void delay_us(uint32_t us);
 bool is_flash_operation_complete(void);
-void return_data_word(uint32_t* data_buffer);
+void return_data_word(uint8_t* data_buffer);
 flash_status_t mx25l_init(void);
-void read_flash_id_sequence(void);
+flash_status_t read_flash_id_sequence(void);
 // flash_status_t flash_read_word(uint32_t address);
 flash_status_t flash_wait_ready(void);
 flash_status_t flash_erase_sector(uint32_t address);

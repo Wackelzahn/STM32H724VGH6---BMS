@@ -33,7 +33,7 @@ typedef enum {
 
 static volatile bool flash_operation_complete = true;
 static volatile flash_operation_t flash_operation_type = FLASH_OP_NONE;
-static volatile uint8_t flash_read_buffer[8];  // Buffer for read operations
+static volatile uint8_t flash_read_buffer[4];  // Buffer for read operations
 static volatile uint8_t flash_status_reg = 0;
 
 
@@ -52,15 +52,17 @@ bool is_flash_operation_complete(void)
     return flash_operation_complete;
 }
 
-void return_data_word(uint32_t* data_buffer)
+// Return the 32-bit data word from the read buffer
+void return_data_word(uint8_t* data_buffer)
 {
-    if (data_buffer != NULL) {
-        *data_buffer = ((uint32_t)flash_read_buffer[1] << 24) |
-                       ((uint32_t)flash_read_buffer[2] << 16) |
-                       ((uint32_t)flash_read_buffer[3] << 8)  |
-                       ((uint32_t)flash_read_buffer[4] << 0);
-    }
-}
+    
+        data_buffer[0] = flash_read_buffer[0];
+        data_buffer[1] = flash_read_buffer[1];
+        data_buffer[2] = flash_read_buffer[2];
+        data_buffer[3] = flash_read_buffer[3];
+                      
+    
+  }
 
 
 // Initialize SPI4 in master mode, this function configures:
@@ -150,10 +152,17 @@ flash_status_t mx25l_init(void)
 }
 
 // Keep CS low for entire command sequence
-void read_flash_id_sequence(void)
+flash_status_t read_flash_id_sequence(void)
 {
     flash_operation_complete = false;
     flash_operation_type = FLASH_OP_READ_ID;
+
+    // Clear buffer first
+    flash_read_buffer[0] = 0;
+    flash_read_buffer[1] = 0;
+    flash_read_buffer[2] = 0;
+    flash_read_buffer[3] = 0;
+
     CS_LOW();  // Keep low for entire sequence
     
     // Always reset everything before transfer
@@ -173,6 +182,8 @@ void read_flash_id_sequence(void)
  
     // Start the transaction
     SPI4->CR1 |= (1U << 9); // CSTART = 1
+
+    return FLASH_OK;
 
 }
 
@@ -259,15 +270,16 @@ flash_status_t flash_read_status(uint8_t* status)
     // Start transfer
     SPI4->CR1 |= (1U << 9);
     
-    // Wait for completion
+      // Wait for completion
     volatile uint32_t timeout = 100000;
     while (!flash_operation_complete && timeout--);
     
     if (timeout > 0) {
-        *status = flash_status_reg;
+        *status = flash_status_reg;  // <- USE THE PARAMETER HERE!
         return FLASH_OK;
     }
-    return FLASH_ERROR;
+
+    return FLASH_OK;
 }
 
 // Send write enable command
@@ -383,6 +395,7 @@ flash_status_t flash_read_word(uint32_t address)
     // Start transfer
     SPI4->CR1 |= (1U << 9);
     
+  
     return FLASH_OK;
 }
 
@@ -401,11 +414,14 @@ void SPI4_IRQHandler(void) {
       case FLASH_OP_READ_STATUS:
         {
           // Read received byte from RXDR
-          flash_read_buffer[0] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read -> trash
-          flash_read_buffer[1] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
+          *(volatile uint8_t*)&SPI4->RXDR;  // Discard command byte
+          flash_status_reg = *(volatile uint8_t*)&SPI4->RXDR;  // Read status byte
+
+          flash_read_buffer[0] = flash_status_reg;;  // 8-bit read
+          flash_read_buffer[1] = 0;
           flash_read_buffer[2] = 0;
           flash_read_buffer[3] = 0;
-          flash_read_buffer[4] = 0;
+          
         }
         break;
       
@@ -416,37 +432,55 @@ void SPI4_IRQHandler(void) {
           flash_read_buffer[1] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
           flash_read_buffer[2] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
           flash_read_buffer[3] = *(volatile uint8_t*)&SPI4->RXDR;  // 8-bit read
-          flash_read_buffer[4] = 0;
+          
         }
           break;
 
       case FLASH_OP_READ_DATA:
         {
           // Read data sequence
-          uint8_t trash = 0;
-          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Command byte
-          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
-          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
-          trash = *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
-          (void)trash; // avoid unused variable warning
-          flash_read_buffer[0] = 0;
-          flash_read_buffer[1] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
-          flash_read_buffer[2] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
-          flash_read_buffer[3] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
-          flash_read_buffer[4] |= *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          *(volatile uint8_t*)&SPI4->RXDR;       // Command byte
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte
+          flash_read_buffer[0] = *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[1] = *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[2] = *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          flash_read_buffer[3] = *(volatile uint8_t*)&SPI4->RXDR; // Data byte
+          
         }
         break;
         
-        case FLASH_OP_WRITE_ENABLE:
         case FLASH_OP_SECTOR_ERASE:
-        // No data to read back
+        {
+          // Read data sequence
+          *(volatile uint8_t*)&SPI4->RXDR;       // Command byte -> flush
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte -> flush
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte -> flush
+          *(volatile uint8_t*)&SPI4->RXDR;       // Address byte -> flush
+        }
+        break;
+
+        case FLASH_OP_WRITE_ENABLE:
+        {
+          *(volatile uint8_t*)&SPI4->RXDR;       // Command byte -> flush
+        }
+        break;
+        
+        case FLASH_OP_PAGE_PROGRAM:
+        {
+          // Read data sequence
+
+          while (SPI4->SR & (1U << 0)) {  // While RXP is set
+                    *(volatile uint8_t*)&SPI4->RXDR; // Flush all data bytes
+                }
+        }
+
+        default:
+        // Clear any unexpected data
           while (SPI4->SR & (1U << 0)) {  // While RXP is set
                     *(volatile uint8_t*)&SPI4->RXDR;
                 }
-        break;
-        
-        default:
-        // Unknown operation
         break;
     }
     
