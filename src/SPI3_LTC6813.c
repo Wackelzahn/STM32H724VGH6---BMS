@@ -14,9 +14,10 @@
 
 #include "SPI3_LTC6813.h"
 
-// LTC6831 specific settings
-#define LTC6831_SPI_MODE        3           // CPOL=1, CPHA=1
-#define LTC6831_MAX_FREQ_HZ     1000000     // 1 MHz max SPI frequency
+// LTC6813 specific settings (supports up to 18 cells)
+#define LTC6813_SPI_MODE        3           // CPOL=1, CPHA=1
+#define LTC6813_MAX_FREQ_HZ     1000000     // 1 MHz max SPI frequency
+#define LTC6813_MAX_CELLS       18          // Maximum number of cells
 
 // SPI CR1 bits
 #define SPI_CR1_SPE             (1 << 0)   // SPI Enable
@@ -29,6 +30,9 @@
 // SPI CFG1 bits
 #define SPI_CFG1_DSIZE_8BIT     (7 << 0)   // Data size = 8 bits
 #define SPI_CFG1_FTHLV_1DATA    (0 << 5)   // FIFO threshold = 1 data
+#define SPI_CFG1_MBR_DIV2       (0 << 28)  // Baud rate = fPCLK/2
+#define SPI_CFG1_MBR_DIV4       (1 << 28)  // Baud rate = fPCLK/4
+#define SPI_CFG1_MBR_DIV8       (2 << 28)  // Baud rate = fPCLK/8
 #define SPI_CFG1_MBR_DIV16      (3 << 28)  // Baud rate = fPCLK/16
 #define SPI_CFG1_MBR_DIV32      (4 << 28)  // Baud rate = fPCLK/32
 #define SPI_CFG1_MBR_DIV64      (5 << 28)  // Baud rate = fPCLK/64
@@ -135,5 +139,194 @@ void SPI3_LTC6831_Init(void)
     // 5. Enable SPI3
     SPI3->CR1 |= SPI_CR1_SPE;
 
+}
+
+// Transmit and receive a single byte via SPI3
+uint8_t SPI3_TransmitReceiveByte(uint8_t tx_data)
+{
+    // Wait until TXE flag is set (transmit buffer empty)
+    while(!(SPI3->SR & (1 << 1)));
+    
+    // Send data (cast to uint8_t pointer for byte access)
+    *((volatile uint8_t*)&SPI3->TXDR) = tx_data;
+    
+    // Start transfer
+    SPI3->CR1 |= SPI_CR1_CSTART;
+    
+    // Wait until RXNE flag is set (receive buffer not empty)
+    while(!(SPI3->SR & (1 << 0)));
+    
+    // Read received data (cast to uint8_t pointer for byte access)
+    return *((volatile uint8_t*)&SPI3->RXDR);
+}
+
+
+// Transmit multiple bytes to LTC6831
+void SPI3_TransmitReceive(uint8_t *tx_buffer, uint8_t *rx_buffer, uint16_t length)
+{
+    SPI3_SetCS(0);  // Assert CS
+    
+    for(uint16_t i = 0; i < length; i++) {
+        uint8_t rx_byte = SPI3_TransmitReceiveByte(tx_buffer[i]);
+        if(rx_buffer != NULL) {
+            rx_buffer[i] = rx_byte;
+        }
+    }
+    
+    SPI3_SetCS(1);  // Deassert CS
+}
+
+
+// Simple delay function (blocking)
+void delay_ms(uint32_t ms)
+{
+    // This is a rough approximation, adjust based on your system clock
+    for(uint32_t i = 0; i < ms; i++) {
+        for(volatile uint32_t j = 0; j < 20000; j++);
+    }
+}
+
+// Example LTC6831 command: Wake up the IC
+void LTC6831_Wakeup(void)
+{
+    uint8_t dummy = 0xFF;
+    SPI3_SetCS(0);
+    SPI3_TransmitReceiveByte(dummy);
+    SPI3_SetCS(1);
+    delay_ms(1);  // Wait for wake-up
+}
+
+// LTC6813 Command codes (supports 18 cells)
+#define CMD_ADCV            0x0260  // Start cell voltage ADC conversion
+#define CMD_ADCV_MODE_7K    0x0260  // 7kHz mode (fastest)
+#define CMD_ADCV_MODE_26HZ  0x0360  // 26Hz mode (filtered)
+#define CMD_ADCV_MODE_2K    0x0370  // 2kHz mode
+#define CMD_RDCVA           0x0004  // Read cell voltage register group A (cells 1-3)
+#define CMD_RDCVB           0x0006  // Read cell voltage register group B (cells 4-6)
+#define CMD_RDCVC           0x0008  // Read cell voltage register group C (cells 7-9)
+#define CMD_RDCVD           0x000A  // Read cell voltage register group D (cells 10-12)
+#define CMD_RDCVE           0x0009  // Read cell voltage register group E (cells 13-15)
+#define CMD_RDCVF           0x000B  // Read cell voltage register group F (cells 16-18)
+
+// PEC (Packet Error Code) calculation table
+static const uint16_t pec15Table[256] = {
+    0x0000, 0xC599, 0xCEAB, 0x0B32, 0xD8CF, 0x1D56, 0x1664, 0xD3FD,
+    0xF407, 0x319E, 0x3AAC, 0xFF35, 0x2CC8, 0xE951, 0xE263, 0x27FA,
+    0xAD97, 0x680E, 0x633C, 0xA6A5, 0x7558, 0xB0C1, 0xBBF3, 0x7E6A,
+    0x5990, 0x9C09, 0x973B, 0x52A2, 0x815F, 0x44C6, 0x4FF4, 0x8A6D,
+    0x5B2E, 0x9EB7, 0x9585, 0x501C, 0x83E1, 0x4678, 0x4D4A, 0x88D3,
+    0xAF29, 0x6AB0, 0x6182, 0xA41B, 0x77E6, 0xB27F, 0xB94D, 0x7CD4,
+    0xF6B9, 0x3320, 0x3812, 0xFD8B, 0x2E76, 0xEBEF, 0xE0DD, 0x2544,
+    0x02BE, 0xC727, 0xCC15, 0x098C, 0xDA71, 0x1FE8, 0x14DA, 0xD143,
+    0xF3C5, 0x365C, 0x3D6E, 0xF8F7, 0x2B0A, 0xEE93, 0xE5A1, 0x2038,
+    0x07C2, 0xC25B, 0xC969, 0x0CF0, 0xDF0D, 0x1A94, 0x11A6, 0xD43F,
+    0x5E52, 0x9BCB, 0x90F9, 0x5560, 0x869D, 0x4304, 0x4836, 0x8DAF,
+    0xAA55, 0x6FCC, 0x64FE, 0xA167, 0x729A, 0xB703, 0xBC31, 0x79A8,
+    0xA8EB, 0x6D72, 0x6640, 0xA3D9, 0x7024, 0xB5BD, 0xBE8F, 0x7B16,
+    0x5CEC, 0x9975, 0x9247, 0x57DE, 0x8423, 0x41BA, 0x4A88, 0x8F11,
+    0x057C, 0xC0E5, 0xCBD7, 0x0E4E, 0xDDB3, 0x182A, 0x1318, 0xD681,
+    0xF17B, 0x34E2, 0x3FD0, 0xFA49, 0x29B4, 0xEC2D, 0xE71F, 0x2286,
+    0xA213, 0x678A, 0x6CB8, 0xA921, 0x7ADC, 0xBF45, 0xB477, 0x71EE,
+    0x5614, 0x938D, 0x98BF, 0x5D26, 0x8EDB, 0x4B42, 0x4070, 0x85E9,
+    0x0F84, 0xCA1D, 0xC12F, 0x04B6, 0xD74B, 0x12D2, 0x19E0, 0xDC79,
+    0xFB83, 0x3E1A, 0x3528, 0xF0B1, 0x234C, 0xE6D5, 0xEDE7, 0x287E,
+    0xF93D, 0x3CA4, 0x3796, 0xF20F, 0x21F2, 0xE46B, 0xEF59, 0x2AC0,
+    0x0D3A, 0xC8A3, 0xC391, 0x0608, 0xD5F5, 0x106C, 0x1B5E, 0xDEC7,
+    0x54AA, 0x9133, 0x9A01, 0x5F98, 0x8C65, 0x49FC, 0x42CE, 0x8757,
+    0xA0AD, 0x6534, 0x6E06, 0xAB9F, 0x7862, 0xBDFB, 0xB6C9, 0x7350,
+    0x51D6, 0x944F, 0x9F7D, 0x5AE4, 0x8919, 0x4C80, 0x47B2, 0x822B,
+    0xA5D1, 0x6048, 0x6B7A, 0xAEE3, 0x7D1E, 0xB887, 0xB3B5, 0x762C,
+    0xFC41, 0x39D8, 0x32EA, 0xF773, 0x248E, 0xE117, 0xEA25, 0x2FBC,
+    0x0846, 0xCDDF, 0xC6ED, 0x0374, 0xD089, 0x1510, 0x1E22, 0xDBBB,
+    0x0AF8, 0xCF61, 0xC453, 0x01CA, 0xD237, 0x17AE, 0x1C9C, 0xD905,
+    0xFEFF, 0x3B66, 0x3054, 0xF5CD, 0x2630, 0xE3A9, 0xE89B, 0x2D02,
+    0xA76F, 0x62F6, 0x69C4, 0xAC5D, 0x7FA0, 0xBA39, 0xB10B, 0x7492,
+    0x5368, 0x96F1, 0x9DC3, 0x585A, 0x8BA7, 0x4E3E, 0x450C, 0x8095
+};
+
+////////////////////////////// below not yet verified!
+
+
+// Calculate PEC15 for LTC6831 communication
+uint16_t LTC6831_CalculatePEC(uint8_t *data, uint8_t len)
+{
+    uint16_t remainder = 16;  // PEC seed
+    
+    for(uint8_t i = 0; i < len; i++) {
+        uint8_t address = ((remainder >> 7) ^ data[i]) & 0xFF;
+        remainder = (remainder << 8) ^ pec15Table[address];
+    }
+    
+    return (remainder * 2);  // The PEC15 has a 0 in the LSB so multiply by 2
+}
+
+
+// Send command to LTC6831 with PEC
+void LTC6831_SendCommand(uint16_t cmd)
+{
+    uint8_t cmd_data[4];
+    uint16_t cmd_pec;
+    
+    // Prepare command bytes
+    cmd_data[0] = (cmd >> 8) & 0xFF;
+    cmd_data[1] = cmd & 0xFF;
+    
+    // Calculate PEC for command
+    cmd_pec = LTC6831_CalculatePEC(cmd_data, 2);
+    cmd_data[2] = (cmd_pec >> 8) & 0xFF;
+    cmd_data[3] = cmd_pec & 0xFF;
+    
+    // Send command with PEC
+    SPI3_TransmitReceive(cmd_data, NULL, 4);
+}
+
+// Read register group from LTC6831
+uint8_t LTC6831_ReadRegisterGroup(uint16_t cmd, uint8_t *data)
+{
+    uint8_t rx_buffer[8];
+    uint16_t received_pec, calculated_pec;
+    
+    // Send read command
+    LTC6831_SendCommand(cmd);
+    
+    // Read 8 bytes (6 data bytes + 2 PEC bytes)
+    SPI3_SetCS(0);
+    for(uint8_t i = 0; i < 8; i++) {
+        rx_buffer[i] = SPI3_TransmitReceiveByte(0xFF);  // Send dummy bytes to receive
+    }
+    SPI3_SetCS(1);
+    
+    // Extract received PEC
+    received_pec = (rx_buffer[6] << 8) | rx_buffer[7];
+    
+    // Calculate PEC for received data
+    calculated_pec = LTC6831_CalculatePEC(rx_buffer, 6);
+    
+    // Copy data if PEC check passes
+    if(received_pec == calculated_pec) {
+        for(uint8_t i = 0; i < 6; i++) {
+            data[i] = rx_buffer[i];
+        }
+        return 1;  // PEC check passed
+    }
+    
+    return 0;  // PEC check failed
+}
+
+// Start cell voltage ADC conversion
+void LTC6831_StartCellVoltageConversion(uint16_t mode)
+{
+    LTC6831_Wakeup();
+    LTC6831_SendCommand(mode);
+    
+    // Wait for conversion to complete
+    // 7kHz mode: ~200us per cell group
+    // 26Hz mode: ~200ms per cell group  
+    // 2kHz mode: ~1ms per cell group
+    if(mode == CMD_ADCV_MODE_26HZ) {
+        delay_ms(250);  // Conservative delay for filtered mode
+    } else {
+        delay_ms(3);    // Conservative delay for fast modes
+    }
 }
 
