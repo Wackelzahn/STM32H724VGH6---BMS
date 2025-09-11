@@ -33,6 +33,7 @@
 #include "shunt_can.h"
 #include "conversion.h"
 #include "SPI_Flash.h"
+#include "SPI3_LTC6813.h"
 
 
 
@@ -256,6 +257,7 @@ test_buffer[3] = 0x33U; // for testing only
 
     mx25l_init(); // Initialize SPI Flash memory
 
+    SPI3_LTC6813_Init(); // Initialize SPI3 for LTC6831
 
   while (1) {
   //  if (fifo_full_counter > 0) {

@@ -20,35 +20,35 @@
 #define LTC6813_MAX_CELLS       18          // Maximum number of cells
 
 // SPI CR1 bits
-#define SPI_CR1_SPE             (1 << 0)   // SPI Enable
-#define SPI_CR1_MASRX           (1 << 8)   // Master automatic SUSP in Receive mode
-#define SPI_CR1_CSTART          (1 << 9)   // Master transfer start
-#define SPI_CR1_CSUSP           (1 << 10)  // Master SUSPend request
-#define SPI_CR1_HDDIR           (1 << 11)  // Half-duplex direction
-#define SPI_CR1_SSI             (1 << 12)  // Internal slave select
+#define SPI_CR1_SPE             (1U << 0)   // SPI Enable
+#define SPI_CR1_MASRX           (1U << 8)   // Master automatic SUSP in Receive mode
+#define SPI_CR1_CSTART          (1U << 9)   // Master transfer start
+#define SPI_CR1_CSUSP           (1U << 10)  // Master SUSPend request
+#define SPI_CR1_HDDIR           (1U << 11)  // Half-duplex direction
+#define SPI_CR1_SSI             (1U << 12)  // Internal slave select
 
 // SPI CFG1 bits
-#define SPI_CFG1_DSIZE_8BIT     (7 << 0)   // Data size = 8 bits
-#define SPI_CFG1_FTHLV_1DATA    (0 << 5)   // FIFO threshold = 1 data
-#define SPI_CFG1_MBR_DIV2       (0 << 28)  // Baud rate = fPCLK/2
-#define SPI_CFG1_MBR_DIV4       (1 << 28)  // Baud rate = fPCLK/4
-#define SPI_CFG1_MBR_DIV8       (2 << 28)  // Baud rate = fPCLK/8
-#define SPI_CFG1_MBR_DIV16      (3 << 28)  // Baud rate = fPCLK/16
-#define SPI_CFG1_MBR_DIV32      (4 << 28)  // Baud rate = fPCLK/32
-#define SPI_CFG1_MBR_DIV64      (5 << 28)  // Baud rate = fPCLK/64
-#define SPI_CFG1_MBR_DIV128     (6 << 28)  // Baud rate = fPCLK/128
-#define SPI_CFG1_MBR_DIV256     (7 << 28)  // Baud rate = fPCLK/256
+#define SPI_CFG1_DSIZE_8BIT     (7U << 0)   // Data size = 8 bits
+#define SPI_CFG1_FTHLV_1DATA    (0U << 5)   // FIFO threshold = 1 data
+#define SPI_CFG1_MBR_DIV2       (0U << 28)  // Baud rate = fPCLK/2
+#define SPI_CFG1_MBR_DIV4       (1U << 28)  // Baud rate = fPCLK/4
+#define SPI_CFG1_MBR_DIV8       (2U << 28)  // Baud rate = fPCLK/8
+#define SPI_CFG1_MBR_DIV16      (3U << 28)  // Baud rate = fPCLK/16
+#define SPI_CFG1_MBR_DIV32      (4U << 28)  // Baud rate = fPCLK/32
+#define SPI_CFG1_MBR_DIV64      (5U << 28)  // Baud rate = fPCLK/64
+#define SPI_CFG1_MBR_DIV128     (6U << 28)  // Baud rate = fPCLK/128
+#define SPI_CFG1_MBR_DIV256     (7U << 28)  // Baud rate = fPCLK/256
 
 // SPI CFG2 bits
-#define SPI_CFG2_MASTER         (1 << 22)  // Master mode
-#define SPI_CFG2_COMM_FULL      (0 << 17)  // Full-duplex
-#define SPI_CFG2_SSM            (1 << 26)  // Software slave management
-#define SPI_CFG2_CPOL           (1 << 25)  // Clock polarity
-#define SPI_CFG2_CPHA           (1 << 24)  // Clock phase
-#define SPI_CFG2_LSBFRST        (0 << 23)  // MSB first
-#define SPI_CFG2_SSOM           (1 << 30)  // SS output management
-#define SPI_CFG2_SSOE           (1 << 29)  // SS output enable
-#define SPI_CFG2_AFCNTR         (1 << 31)  // Alternate function control
+#define SPI_CFG2_MASTER         (1U << 22)  // Master mode
+#define SPI_CFG2_COMM_FULL      (0U << 17)  // Full-duplex
+#define SPI_CFG2_SSM            (1U << 26)  // Software slave management
+#define SPI_CFG2_CPOL           (1U << 25)  // Clock polarity
+#define SPI_CFG2_CPHA           (1U << 24)  // Clock phase
+#define SPI_CFG2_LSBFRST        (0U << 23)  // MSB first
+#define SPI_CFG2_SSOM           (1U << 30)  // SS output management
+#define SPI_CFG2_SSOE           (1U << 29)  // SS output enable
+#define SPI_CFG2_AFCNTR         (1U << 31)  // Alternate function control
 
 // CS pin control macros
 #define CS3_HIGH()   (GPIOA->BSRR = (1U << 15))
@@ -60,18 +60,18 @@
 //                                          PB4  - SPI3_MISO (AF6) - Master In Slave Out
 //                                          PC10 - SPI3_SCK  (AF6) - Serial Clock
 //                                          PD6  - SPI3_MOSI (AF5) - Master Out Slave In
-
-void SPI3_LTC6831_Init(void)
+// 
+void SPI3_LTC6813_Init(void)
 {
     // 1. Enable clocks for GPIOA, GPIOB, GPIOC, GPIOD and SPI3
-    RCC->AHB4ENR |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);  // Enable GPIOA, B, C, D
-    RCC->APB1LENR |= (1 << 15);     // Enable SPI3
+    RCC->AHB4ENR |= (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3);  // Enable GPIOA, B, C, D
+    RCC->APB1LENR |= (1U << 15);     // Enable SPI3
     for(volatile int i = 0; i < 100; i++);  // Small delay for clock stabilization
 
     // 2. Reset SPI3 peripheral
-    RCC->APB1LRSTR |= (1 << 15);   // Assert reset
+    RCC->APB1LRSTR |= (1U << 15);   // Assert reset
     for(volatile int i = 0; i < 10; i++);
-    RCC->APB1LRSTR &= ~(1 << 15);  // Release reset
+    RCC->APB1LRSTR &= ~(1U << 15);  // Release reset
 
     // 3. Configure GPIO pins for SPI3
     // PA15 (NSS) - GPIO Output
@@ -122,13 +122,14 @@ void SPI3_LTC6831_Init(void)
     
     // Configure SPI3_CFG2
     SPI3->CFG2 = 0;  // Clear register
-    SPI3->CFG2 |= SPI_CFG2_MASTER;          // Master mode
+    
     SPI3->CFG2 |= SPI_CFG2_COMM_FULL;       // Full-duplex
     SPI3->CFG2 |= SPI_CFG2_SSM;             // Software slave management
     SPI3->CFG2 |= SPI_CFG2_CPOL;            // CPOL = 1 for Mode 3
     SPI3->CFG2 |= SPI_CFG2_CPHA;            // CPHA = 1 for Mode 3
     SPI3->CFG2 &= ~SPI_CFG2_LSBFRST;        // MSB first
     SPI3->CFG2 |= SPI_CFG2_AFCNTR;          // Enable alternate function control
+    SPI3->CFG2 |= SPI_CFG2_MASTER;          // Master mode
 
     // Configure SPI3_CR2 (set TSIZE if needed for automatic EOT generation)
     SPI3->CR2 = 0;  // Clear register
@@ -164,7 +165,7 @@ uint8_t SPI3_TransmitReceiveByte(uint8_t tx_data)
 // Transmit multiple bytes to LTC6831
 void SPI3_TransmitReceive(uint8_t *tx_buffer, uint8_t *rx_buffer, uint16_t length)
 {
-    SPI3_SetCS(0);  // Assert CS
+    CS3_LOW();  // Assert CS
     
     for(uint16_t i = 0; i < length; i++) {
         uint8_t rx_byte = SPI3_TransmitReceiveByte(tx_buffer[i]);
@@ -173,7 +174,7 @@ void SPI3_TransmitReceive(uint8_t *tx_buffer, uint8_t *rx_buffer, uint16_t lengt
         }
     }
     
-    SPI3_SetCS(1);  // Deassert CS
+    CS3_HIGH();  // Deassert CS
 }
 
 
@@ -187,12 +188,12 @@ void delay_ms(uint32_t ms)
 }
 
 // Example LTC6831 command: Wake up the IC
-void LTC6831_Wakeup(void)
+void LTC6813_Wakeup(void)
 {
     uint8_t dummy = 0xFF;
-    SPI3_SetCS(0);
+    CS3_LOW();
     SPI3_TransmitReceiveByte(dummy);
-    SPI3_SetCS(1);
+    CS3_HIGH();
     delay_ms(1);  // Wait for wake-up
 }
 
@@ -244,16 +245,16 @@ static const uint16_t pec15Table[256] = {
     0x5368, 0x96F1, 0x9DC3, 0x585A, 0x8BA7, 0x4E3E, 0x450C, 0x8095
 };
 
-////////////////////////////// below not yet verified!
+
 
 
 // Calculate PEC15 for LTC6831 communication
-uint16_t LTC6831_CalculatePEC(uint8_t *data, uint8_t len)
+uint16_t LTC6813_CalculatePEC(uint8_t *data, uint8_t len)
 {
     uint16_t remainder = 16;  // PEC seed
     
     for(uint8_t i = 0; i < len; i++) {
-        uint8_t address = ((remainder >> 7) ^ data[i]) & 0xFF;
+        uint8_t address = (uint8_t)(((remainder >> 7) ^ data[i]) & 0xFF);
         remainder = (remainder << 8) ^ pec15Table[address];
     }
     
@@ -262,45 +263,45 @@ uint16_t LTC6831_CalculatePEC(uint8_t *data, uint8_t len)
 
 
 // Send command to LTC6831 with PEC
-void LTC6831_SendCommand(uint16_t cmd)
+void LTC6813_SendCommand(uint16_t cmd)
 {
     uint8_t cmd_data[4];
     uint16_t cmd_pec;
     
     // Prepare command bytes
-    cmd_data[0] = (cmd >> 8) & 0xFF;
-    cmd_data[1] = cmd & 0xFF;
+    cmd_data[0] = (uint8_t)((cmd >> 8) & 0xFF);
+    cmd_data[1] = (uint8_t)(cmd & 0xFF);
     
     // Calculate PEC for command
-    cmd_pec = LTC6831_CalculatePEC(cmd_data, 2);
-    cmd_data[2] = (cmd_pec >> 8) & 0xFF;
-    cmd_data[3] = cmd_pec & 0xFF;
+    cmd_pec = LTC6813_CalculatePEC(cmd_data, 2);
+    cmd_data[2] = (uint8_t)((cmd_pec >> 8) & 0xFF);
+    cmd_data[3] = (uint8_t)(cmd_pec & 0xFF);
     
     // Send command with PEC
     SPI3_TransmitReceive(cmd_data, NULL, 4);
 }
 
 // Read register group from LTC6831
-uint8_t LTC6831_ReadRegisterGroup(uint16_t cmd, uint8_t *data)
+uint8_t LTC6813_ReadRegisterGroup(uint16_t cmd, uint8_t *data)
 {
     uint8_t rx_buffer[8];
     uint16_t received_pec, calculated_pec;
     
     // Send read command
-    LTC6831_SendCommand(cmd);
+    LTC6813_SendCommand(cmd);
     
     // Read 8 bytes (6 data bytes + 2 PEC bytes)
-    SPI3_SetCS(0);
+    CS3_LOW();
     for(uint8_t i = 0; i < 8; i++) {
         rx_buffer[i] = SPI3_TransmitReceiveByte(0xFF);  // Send dummy bytes to receive
     }
-    SPI3_SetCS(1);
+    CS3_HIGH();
     
     // Extract received PEC
-    received_pec = (rx_buffer[6] << 8) | rx_buffer[7];
+    received_pec = (uint16_t)((rx_buffer[6] << 8) | rx_buffer[7]);
     
     // Calculate PEC for received data
-    calculated_pec = LTC6831_CalculatePEC(rx_buffer, 6);
+    calculated_pec = LTC6813_CalculatePEC(rx_buffer, 6);
     
     // Copy data if PEC check passes
     if(received_pec == calculated_pec) {
@@ -314,10 +315,10 @@ uint8_t LTC6831_ReadRegisterGroup(uint16_t cmd, uint8_t *data)
 }
 
 // Start cell voltage ADC conversion
-void LTC6831_StartCellVoltageConversion(uint16_t mode)
+void LTC6813_StartCellVoltageConversion(uint16_t mode)
 {
-    LTC6831_Wakeup();
-    LTC6831_SendCommand(mode);
+    LTC6813_Wakeup();
+    LTC6813_SendCommand(mode);
     
     // Wait for conversion to complete
     // 7kHz mode: ~200us per cell group
@@ -329,4 +330,82 @@ void LTC6831_StartCellVoltageConversion(uint16_t mode)
         delay_ms(3);    // Conservative delay for fast modes
     }
 }
+
+
+// Read all cell voltages from LTC6813 (18 cells)
+uint8_t LTC6813_ReadAllCellVoltages(uint32_t *cell_voltages)
+{
+    uint8_t reg_data[6];
+    uint8_t success = 1;
+    
+    // Start ADC conversion (using 7kHz mode for speed)
+    LTC6813_StartCellVoltageConversion(CMD_ADCV_MODE_7K);
+    
+    // Read Cell Voltage Register Group A (Cells 1-3)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVA, reg_data)) {
+        cell_voltages[0] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[1] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[2] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    // Read Cell Voltage Register Group B (Cells 4-6)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVB, reg_data)) {
+        cell_voltages[3] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[4] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[5] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    // Read Cell Voltage Register Group C (Cells 7-9)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVC, reg_data)) {
+        cell_voltages[6] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[7] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[8] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    // Read Cell Voltage Register Group D (Cells 10-12)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVD, reg_data)) {
+        cell_voltages[9] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[10] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[11] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    // Read Cell Voltage Register Group E (Cells 13-15)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVE, reg_data)) {
+        cell_voltages[12] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[13] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[14] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    // Read Cell Voltage Register Group F (Cells 16-18)
+    if(LTC6813_ReadRegisterGroup(CMD_RDCVF, reg_data)) {
+        cell_voltages[15] = reg_data[0] | (reg_data[1] << 8);
+        cell_voltages[16] = reg_data[2] | (reg_data[3] << 8);
+        cell_voltages[17] = reg_data[4] | (reg_data[5] << 8);
+    } else {
+        success = 0;
+    }
+    
+    return success;
+}
+
+
+// Convert raw voltage reading to millivolts
+float LTC6813_ConvertToMillivolts(uint32_t raw_voltage)
+{
+    // LTC6813 returns voltage in 100uV units
+    // So multiply by 0.1 to get millivolts
+    return (float)raw_voltage * 0.1f;
+}
+
+
 

@@ -112,7 +112,7 @@ flash_status_t mx25l_init(void)
     SPI4->CFG1 = 0;  // Clear all bits
     SPI4->CFG1 |= (7U << 0);        // 8-bit data size (7+1=8)
     SPI4->CFG1 |= (0U << 5);        // FIFO threshold FTHLV: 1 byte
-    SPI4->CFG1 |= (4U << 28);       // Baud rate: PCLK/256
+    SPI4->CFG1 |= (4U << 28);       // Baud rate: PCLK/32 (Assuming PCLK=100MHz -> 3.125MHz)
 
     // Configure SPI4 CFG2 (master mode, Mode 0, enable SSM)
     SPI4->CFG2 =  (0U << 17)    // COMM = 0 (Full duplex)
