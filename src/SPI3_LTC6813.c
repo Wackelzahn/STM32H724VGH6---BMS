@@ -155,7 +155,12 @@ uint8_t SPI3_TransmitReceiveByte(uint8_t tx_data)
     SPI3->CR1 |= SPI_CR1_CSTART;
     
     // Wait until RXNE flag is set (receive buffer not empty)
-    while(!(SPI3->SR & (1 << 0)));
+    uint32_t timeout = 10000;
+    while(!(SPI3->SR & (1 << 1)) && --timeout);
+    if(timeout == 0) {
+        // Timeout occurred
+        return 0xFF;  // Return dummy value on timeout
+    }
     
     // Read received data (cast to uint8_t pointer for byte access)
     return *((volatile uint8_t*)&SPI3->RXDR);
@@ -199,7 +204,7 @@ void LTC6813_Wakeup(void)
 
 // LTC6813 Command codes (supports 18 cells)
 #define CMD_ADCV            0x0260  // Start cell voltage ADC conversion
-#define CMD_ADCV_MODE_7K    0x0260  // 7kHz mode (fastest)
+#define CMD_ADCV_MODE_7K    CMD_ADCV  // 7kHz mode (fastest)
 #define CMD_ADCV_MODE_26HZ  0x0360  // 26Hz mode (filtered)
 #define CMD_ADCV_MODE_2K    0x0370  // 2kHz mode
 #define CMD_RDCVA           0x0004  // Read cell voltage register group A (cells 1-3)
