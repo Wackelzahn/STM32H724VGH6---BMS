@@ -34,6 +34,7 @@ uint8_t LTC6813_ReadRegisterGroup(uint16_t cmd, uint8_t *data);
 void LTC6813_StartCellVoltageConversion(uint16_t mode);
 uint8_t LTC6813_ReadAllCellVoltages(uint32_t *cell_voltages);
 float LTC6813_ConvertToMillivolts(uint32_t raw_voltage);
+bool LTC6813_SimpleTest(void);
 
-
+uint8_t test_register(uint16_t command);
 # endif // SPI3_LTC6813_H

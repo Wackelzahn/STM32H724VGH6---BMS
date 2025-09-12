@@ -70,6 +70,9 @@ uint8_t flash_byte[4]; // buffer for flash read data
 uint8_t flash_id[4]; // buffer for flash ID data
 uint32_t flash_status = 0; // buffer for flash status data
 
+uint32_t cell_voltages[18];  // Array for 18 cells
+uint8_t result;
+
 // Debug variables 
 volatile int32_t current = 0;
 volatile int32_t bus_voltage = 0;
@@ -257,7 +260,15 @@ test_buffer[3] = 0x33U; // for testing only
 
     mx25l_init(); // Initialize SPI Flash memory
 
-    SPI3_LTC6813_Init(); // Initialize SPI3 for LTC6831
+    SPI3_LTC6813_Init();  // Initialize SPI3 for LTC6831
+
+    // result = LTC6813_ReadAllCellVoltages(cell_voltages);  // Read all cell voltages
+   
+ 
+    LTC6813_Wakeup();
+    delay_ms(1);
+    test_register(0x0010);
+   delay_ms(1);
 
   while (1) {
   //  if (fifo_full_counter > 0) {

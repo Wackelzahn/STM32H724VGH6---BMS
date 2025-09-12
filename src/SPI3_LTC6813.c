@@ -102,7 +102,7 @@ void SPI3_LTC6813_Init(void)
     GPIOD->OSPEEDR |= (3U << 12);   // Set high speed
     GPIOD->PUPDR &= ~(3U << 12);    // No pull-up/pull-down
     GPIOD->AFR[0] &= ~(0xFU << 24); // Clear AF bits for PD6
-    GPIOD->AFR[0] |= (5U << 24);    // Set AF5 for
+    GPIOD->AFR[0] |= ((6U << 24));  // Set AF6 for
 
     CS3_HIGH();  // Ensure CS is high
     
@@ -118,8 +118,9 @@ void SPI3_LTC6813_Init(void)
     SPI3->CFG1 = 0;  // Clear register
     SPI3->CFG1 |= SPI_CFG1_DSIZE_8BIT;      // 8-bit data size
     SPI3->CFG1 |= SPI_CFG1_FTHLV_1DATA;     // FIFO threshold = 1 data
-    SPI3->CFG1 |= SPI_CFG1_MBR_DIV128;      // Set baud rate to ~781 kHz (100MHz/128)
-    
+    SPI3->CFG1 |= SPI_CFG1_MBR_DIV256;      // Set baud rate to ~781 kHz (100MHz/128)
+    SPI3->CFG1 |= (3U << 8);  // FTHLV=4 (011b) - adjust to 4U<<8 for 8 if needed
+
     // Configure SPI3_CFG2
     SPI3->CFG2 = 0;  // Clear register
     
@@ -133,6 +134,8 @@ void SPI3_LTC6813_Init(void)
 
     // Configure SPI3_CR2 (set TSIZE if needed for automatic EOT generation)
     SPI3->CR2 = 0;  // Clear register
+
+    SPI3->CR2 = 0;  // TSIZE=0 initially (set per-transfer)
 
     // Clear any pending flags
     SPI3->IFCR = 0xFFFFFFFF;
@@ -156,7 +159,7 @@ uint8_t SPI3_TransmitReceiveByte(uint8_t tx_data)
     
     // Wait until RXNE flag is set (receive buffer not empty)
     uint32_t timeout = 10000;
-    while(!(SPI3->SR & (1 << 1)) && --timeout);
+    while(!(SPI3->SR & (1 << 0)) && --timeout);
     if(timeout == 0) {
         // Timeout occurred
         return 0xFF;  // Return dummy value on timeout
@@ -412,5 +415,201 @@ float LTC6813_ConvertToMillivolts(uint32_t raw_voltage)
     return (float)raw_voltage * 0.1f;
 }
 
+// Even simpler - just try to read configuration register
+bool LTC6813_SimpleTest(void)
+{
+    uint8_t cmd_data[4];
+    uint8_t rx_data[8];
+    uint16_t cmd_pec;
+    
+    // Wake up
+    CS3_LOW();
+    SPI3_TransmitReceiveByte(0xFF);
+    CS3_HIGH();
+    delay_ms(1);
+    
+    // Send RDCFGA command (0x0002) with PEC
+    uint16_t cmd = 0x0002;  // Read Configuration Register A
+    cmd_data[0] = (uint8_t)(cmd >> 8);
+    cmd_data[1] = (uint8_t)(cmd & 0xFF);
+    
+    // Calculate PEC
+    cmd_pec = LTC6813_CalculatePEC(cmd_data, 2);
+    cmd_data[2] = (uint8_t)(cmd_pec >> 8);
+    cmd_data[3] = (uint8_t)(cmd_pec & 0xFF);
+    
+    // Send command
+    CS3_LOW();
+    for(int i = 0; i < 4; i++) {
+        SPI3_TransmitReceiveByte(cmd_data[i]);
+    }
+    CS3_HIGH();
+    
+    delay_ms(1);
+    
+    // Read response (6 data bytes + 2 PEC bytes)
+    CS3_LOW();
+    for(int i = 0; i < 8; i++) {
+        rx_data[i] = SPI3_TransmitReceiveByte(0xFF);
+    }
+    CS3_HIGH();
+    
+    // Check if we got any non-zero response
+    uint8_t got_response = 0;
+    for(int i = 0; i < 8; i++) {
+        if(rx_data[i] != 0x00 && rx_data[i] != 0xFF) {
+            got_response = 1;
+            break;
+        }
+    }
+    
+    return got_response;
+}
 
+
+// Test function 1: Send 4-byte command and wait for EOT
+uint8_t test_command_transmit(uint16_t command)
+{
+    uint8_t cmd_data[4];
+    uint16_t cmd_pec;
+    
+    // Prepare command bytes
+    cmd_data[0] = (uint8_t)(command >> 8);
+    cmd_data[1] = (uint8_t)(command & 0xFF);
+    
+    // Calculate PEC for command
+    cmd_pec = LTC6813_CalculatePEC(cmd_data, 2);
+    cmd_data[2] = (uint8_t)(cmd_pec >> 8);
+    cmd_data[3] = (uint8_t)(cmd_pec & 0xFF);
+    
+    // Send 4-byte command
+    CS3_LOW();
+    
+    // Set TSIZE for 4 bytes
+    SPI3->CR2 = 4;
+    
+    // Start transfer
+    SPI3->CR1 |= SPI_CR1_CSTART;
+    
+    // Send all 4 bytes
+    for(int i = 0; i < 4; i++) {
+        // Wait for TXP (TX buffer has space)
+        while(!(SPI3->SR & (1 << 1)));
+        
+        // Write byte to TX FIFO
+        *((volatile uint8_t*)&SPI3->TXDR) = cmd_data[i];
+    }
+    
+    // Wait for EOT (End of Transfer) - bit 3
+    while(!(SPI3->SR & (1 << 3)));
+    
+    // Clear EOT flag
+    SPI3->IFCR = (1 << 3);
+    
+    CS3_HIGH();
+    
+    return 1;  // Command sent successfully
+}
+
+// Test function 2: Receive 8-byte register response
+uint8_t test_register(uint16_t command)
+{
+    uint8_t rx_buffer[8];
+    uint8_t cmd_data[4];
+    uint16_t cmd_pec;
+
+    // Small delay between command and read
+    for(volatile int i = 0; i < 10000; i++);
+    delay_ms(1000);
+
+    // Wake-up sequence (CS low >240 µs)
+    CS3_LOW();
+    for(volatile int i = 0; i < 10000; i++);  // ~1 ms (adjust for your sysclk)
+    CS3_HIGH();
+    for(volatile int i = 0; i < 1000; i++);   // ~100 µs settle
+
+
+    // Prepare command bytes
+    cmd_data[0] = (uint8_t)(command >> 8);
+    cmd_data[1] = (uint8_t)(command & 0xFF);
+    
+    // Calculate PEC for command
+    cmd_pec = LTC6813_CalculatePEC(cmd_data, 2);
+    cmd_data[2] = (uint8_t)(cmd_pec >> 8);
+    cmd_data[3] = (uint8_t)(cmd_pec & 0xFF);
+
+    CS3_LOW();
+    
+    // Reset SPI state
+    SPI3->CR1 &= ~((1U << 0) | (1U << 9));
+    SPI3->IFCR = 0xFFFFFFFF;
+
+    SPI3->CR2 = 0;  // Clear CR2 first
+    SPI3->CR2 |= (12U << 0);  // TSIZE=12 (Pos=0, but explicit)
+
+    SPI3->CR1 |= (1U << 0);
+    
+    // Wait for TXP
+    while (!(SPI3->SR & (1U << 1)));
+
+       
+    // Send bytes
+    *(volatile uint8_t*)&SPI3->TXDR = cmd_data[0]; 
+    *(volatile uint8_t*)&SPI3->TXDR = cmd_data[1]; 
+    *(volatile uint8_t*)&SPI3->TXDR = cmd_data[2]; 
+    *(volatile uint8_t*)&SPI3->TXDR = cmd_data[3]; 
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+    *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+      
+    // Start the transaction
+    SPI3->CR1 |= (1U << 9); // CSTART = 1
+
+    // Wait for EOT (End of Transfer)
+    while(!(SPI3->SR & (1 << 3)));
+        
+
+    // Read received byte
+    *(volatile uint8_t*)&SPI3->RXDR;  // Discard command byte
+    *(volatile uint8_t*)&SPI3->RXDR;  // Discard command byte
+    *(volatile uint8_t*)&SPI3->RXDR;  // Discard command byte
+    *(volatile uint8_t*)&SPI3->RXDR;  // Discard command byte
+    rx_buffer[0] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[1] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[2] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[3] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[4] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[5] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[6] = *((volatile uint8_t*)&SPI3->RXDR);
+    rx_buffer[7] = *((volatile uint8_t*)&SPI3->RXDR);
+
+    // Housekeeping
+    SPI3->IFCR |= (1U << 3);  // Clear the EOT flag
+    SPI3->IFCR |= (1U << 4);  // Clear TXTFL flag
+    SPI3->CR1 &= ~(1U << 9);  // Clear CSTART bit for next transfer
+    CS3_HIGH();                // Only raise CS at the end
+
+    
+    
+  
+    
+    // Verify PEC
+    uint16_t received_pec = (uint16_t)((rx_buffer[6] << 8) | rx_buffer[7]);
+    uint16_t calculated_pec = LTC6813_CalculatePEC(rx_buffer, 6);
+    
+    if(received_pec == calculated_pec) {
+        // Copy the 6 data bytes if PEC is good
+        //for(int i = 0; i < 6; i++) {
+        //    data_out[i] = rx_buffer[i];
+       // }
+        return 1;  // Success - PEC check passed
+    }
+    
+    return 0;  // PEC check failed
+}
 
