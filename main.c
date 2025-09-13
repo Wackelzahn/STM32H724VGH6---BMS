@@ -265,8 +265,11 @@ test_buffer[3] = 0x33U; // for testing only
     // result = LTC6813_ReadAllCellVoltages(cell_voltages);  // Read all cell voltages
    
  
-    LTC6813_Wakeup();
-    delay_ms(1);
+    //LTC6813_Wakeup();
+
+  LTC6813_Wakeup();
+
+
     test_register(0x0010);
    delay_ms(1);
 

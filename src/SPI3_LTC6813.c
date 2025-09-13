@@ -102,46 +102,48 @@ void SPI3_LTC6813_Init(void)
     GPIOD->OSPEEDR |= (3U << 12);   // Set high speed
     GPIOD->PUPDR &= ~(3U << 12);    // No pull-up/pull-down
     GPIOD->AFR[0] &= ~(0xFU << 24); // Clear AF bits for PD6
-    GPIOD->AFR[0] |= ((6U << 24));  // Set AF6 for
+    GPIOD->AFR[0] |= ((5U << 24));  // Set AF5 for PD6
 
-    CS3_HIGH();  // Ensure CS is high
+    
     
     // 4. Configure SPI3 for LTC6831
     // Disable SPI3 before configuration
-    SPI3->CR1 &= ~SPI_CR1_SPE;
+    SPI3->CR1 = 0; // Clear everything, SPE = 0
 
     // Configure SPI3_CR1
-    SPI3->CR1 = 0;              // Clear register
-    SPI3->CR1 |= SPI_CR1_SSI;   // Internal slave select high
+    SPI3->CR1 = (1U << 12);     // SSI = 1 (Internal slave select)
 
     // Configure SPI3_CFG1
-    SPI3->CFG1 = 0;  // Clear register
     SPI3->CFG1 |= SPI_CFG1_DSIZE_8BIT;      // 8-bit data size
     SPI3->CFG1 |= SPI_CFG1_FTHLV_1DATA;     // FIFO threshold = 1 data
     SPI3->CFG1 |= SPI_CFG1_MBR_DIV256;      // Set baud rate to ~781 kHz (100MHz/128)
-    SPI3->CFG1 |= (3U << 8);  // FTHLV=4 (011b) - adjust to 4U<<8 for 8 if needed
+    //SPI3->CFG1 |= (3U << 8);  // FTHLV=4 (011b) - adjust to 4U<<8 for 8 if needed
 
     // Configure SPI3_CFG2
-    SPI3->CFG2 = 0;  // Clear register
+
     
-    SPI3->CFG2 |= SPI_CFG2_COMM_FULL;       // Full-duplex
-    SPI3->CFG2 |= SPI_CFG2_SSM;             // Software slave management
-    SPI3->CFG2 |= SPI_CFG2_CPOL;            // CPOL = 1 for Mode 3
-    SPI3->CFG2 |= SPI_CFG2_CPHA;            // CPHA = 1 for Mode 3
-    SPI3->CFG2 &= ~SPI_CFG2_LSBFRST;        // MSB first
-    SPI3->CFG2 |= SPI_CFG2_AFCNTR;          // Enable alternate function control
-    SPI3->CFG2 |= SPI_CFG2_MASTER;          // Master mode
+    SPI3->CFG2 = (0U << 17)    // COMM = 0 (Full duplex)
+               | (1U << 22)    // MASTER = 1 (Master mode)
+               | (1U << 25)    // CPOL = 1 (Mode 3)
+               | (1U << 24)    // CPHA = 1 (Mode 3)
+               | (0U << 29)    // SSOE = 0 
+               | (1U << 26)    // SSM = 1 
+               | (1U << 31);   // AFCNTR = 1
+
+
 
     // Configure SPI3_CR2 (set TSIZE if needed for automatic EOT generation)
-    SPI3->CR2 = 0;  // Clear register
 
-    SPI3->CR2 = 0;  // TSIZE=0 initially (set per-transfer)
+
+    SPI3->CR2 = 12U ;  // set to 12 byte initially
 
     // Clear any pending flags
     SPI3->IFCR = 0xFFFFFFFF;
     
     // 5. Enable SPI3
-    SPI3->CR1 |= SPI_CR1_SPE;
+    SPI3->CR1 |= (1U << 0);  // Enable SPI
+
+    CS3_HIGH();  // Ensure CS is high
 
 }
 
@@ -198,11 +200,11 @@ void delay_ms(uint32_t ms)
 // Example LTC6831 command: Wake up the IC
 void LTC6813_Wakeup(void)
 {
-    uint8_t dummy = 0xFF;
+    // Wake-up sequence (CS low for >300μs)
     CS3_LOW();
-    SPI3_TransmitReceiveByte(dummy);
+    delay_ms(1);  // Hold CS low for >300μs
     CS3_HIGH();
-    delay_ms(1);  // Wait for wake-up
+    delay_ms(1);  // Allow time to stabilize
 }
 
 // LTC6813 Command codes (supports 18 cells)
@@ -538,37 +540,49 @@ uint8_t test_register(uint16_t command)
     cmd_data[2] = (uint8_t)(cmd_pec >> 8);
     cmd_data[3] = (uint8_t)(cmd_pec & 0xFF);
 
-    CS3_LOW();
+
+    
+
+ CS3_LOW();
     
     // Reset SPI state
     SPI3->CR1 &= ~((1U << 0) | (1U << 9));
     SPI3->IFCR = 0xFFFFFFFF;
-
-    SPI3->CR2 = 0;  // Clear CR2 first
-    SPI3->CR2 |= (12U << 0);  // TSIZE=12 (Pos=0, but explicit)
-
+    SPI3->CR2 = 12;  // Command + 3 address bytes + 4 data bytes
     SPI3->CR1 |= (1U << 0);
     
     // Wait for TXP
     while (!(SPI3->SR & (1U << 1)));
+    
 
        
     // Send bytes
     *(volatile uint8_t*)&SPI3->TXDR = cmd_data[0]; 
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = cmd_data[1]; 
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = cmd_data[2]; 
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = cmd_data[3]; 
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
+     while (!(SPI3->SR & (1U << 1)));
     *(volatile uint8_t*)&SPI3->TXDR = 0xFF; // Dummy byte
       
     // Start the transaction
-    SPI3->CR1 |= (1U << 9); // CSTART = 1
+    SPI3->CR1 |= (1U << 9); // CSTART = 1  
 
     // Wait for EOT (End of Transfer)
     while(!(SPI3->SR & (1 << 3)));
